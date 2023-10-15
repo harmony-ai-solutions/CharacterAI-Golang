@@ -147,7 +147,9 @@ func request(url string, session *Session, token string, method string, data map
 		// Ensure windows newlines are not an issue
 		bodyString = strings.ReplaceAll(bodyString, "\r\n", "\n")
 		splitted := strings.Split(bodyString, "\n")
-		bodyString = splitted[len(splitted)-1]
+		if len(splitted) > 1 {
+			bodyString = splitted[len(splitted)-2]
+		}
 	}
 
 	var responseData map[string]interface{}
