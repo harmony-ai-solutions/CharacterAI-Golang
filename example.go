@@ -59,34 +59,26 @@ func main() {
 		}
 	}
 	// Find AI paricipant in chat
-	participantData, okParticipants := chatData["participants"]
-	if !okParticipants {
-		fmt.Println(fmt.Errorf("chat data doesn't hold participant data"))
-		os.Exit(3)
+	var aiParticipant *cai.ChatParticipant
+	for _, participant := range chatData.Participants {
+		if !participant.IsHuman {
+			aiParticipant = participant
+			break
+		}
 	}
-	participantList := participantData.([]interface{})
-	var aiParticipantName string
-	for _, participantRaw := range participantList {
-		participant := participantRaw.(map[string]interface{})
-		isHuman, okIsHuman := participant["is_human"]
-		if okIsHuman {
-			isHumanBool := isHuman.(bool)
-			if !isHumanBool {
-				var userData map[string]interface{}
-				if userDataRaw, okUserData := participant["user"]; !okUserData {
-					fmt.Println(fmt.Errorf("unable to parse user data"))
-					os.Exit(4)
-				} else {
-					userData = userDataRaw.(map[string]interface{})
-				}
-				if userNameRaw, okUserName := userData["username"]; !okUserName {
-					fmt.Println(fmt.Errorf("unable to parse user name"))
-					os.Exit(5)
-				} else {
-					aiParticipantName = userNameRaw.(string)
-					break
-				}
-			}
+
+	// Get History for chatroom
+	if chatHistoryData, errHistory := caiClient.Chat.GetHistory(chatData.ExternalID); errHistory != nil {
+		fmt.Println(fmt.Errorf("unable to parse user data"))
+		os.Exit(4)
+	} else {
+		fmt.Println("Previous messages (up to 5):")
+		messageHistory := chatHistoryData.Messages
+		if len(chatHistoryData.Messages) > 5 {
+			messageHistory = messageHistory[len(messageHistory)-5:]
+		}
+		for _, message := range messageHistory {
+			fmt.Println(fmt.Sprintf("%v: %v", message.SourceName, message.Text))
 		}
 	}
 
@@ -100,17 +92,15 @@ func main() {
 			os.Exit(6)
 		}
 		// Send
-		messageResult, errMessage := caiClient.Chat.SendMessage(chatData["external_id"].(string), aiParticipantName, scanner.Text(), nil)
+		messageResult, errMessage := caiClient.Chat.SendMessage(chatData.ExternalID, aiParticipant.User.Username, scanner.Text(), nil)
 		if errMessage != nil {
 			fmt.Println(fmt.Errorf("unable to send message. Error: %v", errMessage))
 			os.Exit(7)
 		}
 		// Handle result
-		if replyDataRaw, okReplyData := messageResult["replies"]; okReplyData {
-			replyData := replyDataRaw.([]interface{})
-			firstReplyRaw := replyData[0]
-			firstReply := firstReplyRaw.(map[string]interface{})
-			fmt.Println(fmt.Sprintf("%v: %v", aiParticipantName, firstReply["text"]))
+		if len(messageResult.Replies) > 0 {
+			firstReply := messageResult.Replies[0]
+			fmt.Println(fmt.Sprintf("%v: %v", aiParticipant.Name, firstReply.Text))
 			fmt.Println()
 		}
 	}

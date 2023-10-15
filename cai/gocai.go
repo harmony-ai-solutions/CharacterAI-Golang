@@ -71,7 +71,7 @@ func NewGoCAI(token string, plus bool) (*GoCAI, error) {
 	}, nil
 }
 
-func request(url string, session *Session, token string, method string, data map[string]interface{}, split bool, neo bool) (map[string]interface{}, error) {
+func baseRequest(url string, session *Session, token string, method string, data map[string]interface{}, neo bool) ([]byte, error) {
 	var link string
 	if neo {
 		link = "https://neo.character.ai/" + url
@@ -140,7 +140,15 @@ func request(url string, session *Session, token string, method string, data map
 	if err != nil {
 		return nil, err
 	}
-	bodyString := string(bodyBytes)
+	return bodyBytes, nil
+}
+
+func request(url string, session *Session, token string, method string, data map[string]interface{}, split bool, neo bool) (map[string]interface{}, error) {
+	responseBody, errResponse := baseRequest(url, session, token, method, data, neo)
+	if errResponse != nil {
+		return nil, errResponse
+	}
+	bodyString := string(responseBody)
 
 	// Set this to true if multiline output is to be expected.
 	if split {
@@ -153,9 +161,9 @@ func request(url string, session *Session, token string, method string, data map
 	}
 
 	var responseData map[string]interface{}
-	err = json.Unmarshal([]byte(bodyString), &responseData)
-	if err != nil {
-		return nil, err
+	errUnmarshal := json.Unmarshal([]byte(bodyString), &responseData)
+	if errUnmarshal != nil {
+		return nil, errUnmarshal
 	}
 
 	if command, exists := responseData["command"]; exists && command == "neo_error" {

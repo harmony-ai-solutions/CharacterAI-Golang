@@ -32,7 +32,7 @@ go get github.com/harmony-ai-solutions/CharacterAI-Golang
 Detailed documentation and Apidocs coming soon
 
 ## 📙 Example
-Example code for a simple Chat app can be found in [example.go](example.go)
+Example code for a simple, functional Chat app. The code can also be found in [example.go](example.go)
 ```Golang
 package main
 
@@ -66,27 +66,62 @@ func main() {
 	// Get chat data
 	chatData, errChat := caiClient.Chat.GetChat(character)
 	if errChat != nil {
-		//... 
+		if strings.Contains(errChat.Error(), "404") {
+			// Chat does not exist yet, create new
+			chatData, errChat = caiClient.Chat.NewChat(character)
+			if errChat != nil {
+				fmt.Println(fmt.Errorf("unable to create chat, error: %q", errChat))
+				os.Exit(3)
+			}
+		} else {
+			fmt.Println(fmt.Errorf("unable to fetch chat data, error: %q", errChat))
+			os.Exit(2)
+		}
 	}
-	
-	// ... Very Explicit Handling neeeded currently, see example.go for details 
-	
+	// Find AI paricipant in chat
+	var aiParticipant *cai.ChatParticipant
+	for _, participant := range chatData.Participants {
+		if !participant.IsHuman {
+			aiParticipant = participant
+			break
+		}
+	}
+
+	// Get History for chatroom
+	if chatHistoryData, errHistory := caiClient.Chat.GetHistory(chatData.ExternalID); errHistory != nil {
+		fmt.Println(fmt.Errorf("unable to parse user data"))
+		os.Exit(4)
+	} else {
+		fmt.Println("Previous messages (up to 5):")
+		messageHistory := chatHistoryData.Messages
+		if len(chatHistoryData.Messages) > 5 {
+			messageHistory = messageHistory[len(messageHistory)-5:]
+		}
+		for _, message := range messageHistory {
+			fmt.Println(fmt.Sprintf("%v: %v", message.SourceName, message.Text))
+		}
+	}
+
 	for true {
 		fmt.Println("Enter user message: ")
 		scanner := bufio.NewScanner(os.Stdin)
 		scanner.Scan()
 		errInput := scanner.Err()
 		if errInput != nil {
-			//...
+			fmt.Println(fmt.Errorf("unable to scan user input. Error: %v", errInput))
+			os.Exit(6)
 		}
 		// Send
-		messageResult, errMessage := caiClient.Chat.SendMessage(chatData["external_id"].(string), aiParticipantName, scanner.Text(), nil)
+		messageResult, errMessage := caiClient.Chat.SendMessage(chatData.ExternalID, aiParticipant.User.Username, scanner.Text(), nil)
 		if errMessage != nil {
-			//...
+			fmt.Println(fmt.Errorf("unable to send message. Error: %v", errMessage))
+			os.Exit(7)
 		}
 		// Handle result
-		if replyDataRaw, okReplyData := messageResult["replies"]; okReplyData {
-			//...
+		if len(messageResult.Replies) > 0 {
+			firstReply := messageResult.Replies[0]
+			fmt.Println(fmt.Sprintf("%v: %v", aiParticipant.Name, firstReply.Text))
+			fmt.Println()
 		}
 	}
 ```
