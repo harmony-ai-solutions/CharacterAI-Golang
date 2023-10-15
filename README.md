@@ -7,9 +7,83 @@ Original Python source code in this repo: https://github.com/kramcat/CharacterAI
 
 Original Readme kept for reference: [Original Readme](README.old.md)
 
-#### - Repo content currently untested. Full Readme and Examples will be added soon. -
+---
 
-If you find this Repository our Project useful, feel free to [reach out or support us via Patreon](#how-to-reach-out-to-us). 
+## ⚠️ ATTENTION: Pre-Release!
+This repo is currently very barebone and not optimized for productive usage in golang applications yet.
+Any support with testing, verifying functionality and adding proper golang struct handling is heavily appreciated.
+
+#### You have questions, need help, or just want to show your support? Reach us here:
+
+[Discord Server & Patreon page](#how-to-reach-out-to-us).
+
+## 💻 Installation
+```bash
+go get github.com/harmony-ai-solutions/CharacterAI-Golang
+```
+
+## 📚 Documentation
+Detailed documentation and Apidocs coming soon
+
+## 📙 Example
+Example code for a simple Chat app can be found in [example.go](example.go)
+```Golang
+package main
+
+import (
+	"bufio"
+	"fmt"
+	"github.com/harmony-ai-solutions/CharacterAI-Golang/cai"
+	"os"
+	"strconv"
+	"strings"
+)
+
+func main() {
+	// Initial params - Usage of env vars recommended
+	//token := ""
+	//character := ""
+	//isPlus := false
+	token := os.Getenv("CAI_TOKEN")
+	character := os.Getenv("CAI_CHAR")
+	isPlus, errParse := strconv.ParseBool(os.Getenv("CAI_PLUS"))
+	if errParse != nil {
+		isPlus = false
+	}
+
+	// Create client
+	caiClient, errClient := cai.NewGoCAI(token, isPlus)
+	if errClient != nil {
+		fmt.Println(fmt.Errorf("unable to create client, error: %q", errClient))
+		os.Exit(1)
+	}
+	// Get chat data
+	chatData, errChat := caiClient.Chat.GetChat(character)
+	if errChat != nil {
+		//... 
+	}
+	
+	// ... Very Explicit Handling neeeded currently, see example.go for details 
+	
+	for true {
+		fmt.Println("Enter user message: ")
+		scanner := bufio.NewScanner(os.Stdin)
+		scanner.Scan()
+		errInput := scanner.Err()
+		if errInput != nil {
+			//...
+		}
+		// Send
+		messageResult, errMessage := caiClient.Chat.SendMessage(chatData["external_id"].(string), aiParticipantName, scanner.Text(), nil)
+		if errMessage != nil {
+			//...
+		}
+		// Handle result
+		if replyDataRaw, okReplyData := messageResult["replies"]; okReplyData {
+			//...
+		}
+	}
+```
 
 ---
 

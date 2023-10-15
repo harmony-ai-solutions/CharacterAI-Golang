@@ -1,3 +1,19 @@
+// Package cai
+/*
+Copyright © 2023 Harmony AI Solutions & Contributors
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package cai
 
 import (
@@ -21,7 +37,7 @@ func (c *Chat) CreateRoom(characters []string, name, topic string, extraArgs map
 	for key, val := range extraArgs {
 		data[key] = val
 	}
-	return request("../chat/room/create/", c.Session, c.Token, http.MethodPost, data, false, false)
+	return request("chat/room/create/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
 func (c *Chat) Rate(rate int, historyID, messageID string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
@@ -87,8 +103,10 @@ func (c *Chat) SendMessage(historyID, tgt, text string, extraArgs map[string]int
 		"tgt":                 tgt,
 		"text":                text,
 	}
-	for key, val := range extraArgs {
-		data[key] = val
+	if extraArgs != nil {
+		for key, val := range extraArgs {
+			data[key] = val
+		}
 	}
 	return request("chat/streaming/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
@@ -98,8 +116,10 @@ func (c *Chat) DeleteMessage(historyID string, uuidsToDelete []string, extraArgs
 		"history_id":      historyID,
 		"uuids_to_delete": uuidsToDelete,
 	}
-	for key, val := range extraArgs {
-		data[key] = val
+	if extraArgs != nil {
+		for key, val := range extraArgs {
+			data[key] = val
+		}
 	}
 	return request("chat/history/msgs/delete/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
