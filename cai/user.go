@@ -7,32 +7,32 @@ type User struct {
 	Session *Session
 }
 
-func (u *User) Info(token string) (map[string]interface{}, error) {
-	return request("chat/user/", u.Session, token, http.MethodGet, nil, false, false)
+func (u *User) Info() (map[string]interface{}, error) {
+	return request("chat/user/", u.Session, u.Token, http.MethodGet, nil, false, false)
 }
 
-func (u *User) GetProfile(username string, token string) (map[string]interface{}, error) {
+func (u *User) GetProfile(username string) (map[string]interface{}, error) {
 	data := map[string]interface{}{"username": username}
-	return request("chat/user/public/", u.Session, token, http.MethodPost, data, false, false)
+	return request("chat/user/public/", u.Session, u.Token, http.MethodPost, data, false, false)
 }
 
-func (u *User) Followers(token string) (map[string]interface{}, error) {
-	return request("chat/user/followers/", u.Session, token, http.MethodGet, nil, false, false)
+func (u *User) Followers() (map[string]interface{}, error) {
+	return request("chat/user/followers/", u.Session, u.Token, http.MethodGet, nil, false, false)
 }
 
-func (u *User) Following(token string) (map[string]interface{}, error) {
-	return request("chat/user/following/", u.Session, token, http.MethodGet, nil, false, false)
+func (u *User) Following() (map[string]interface{}, error) {
+	return request("chat/user/following/", u.Session, u.Token, http.MethodGet, nil, false, false)
 }
 
-func (u *User) Recent(token string) (map[string]interface{}, error) {
-	return request("chat/characters/recent/", u.Session, token, http.MethodGet, nil, false, false)
+func (u *User) Recent() (map[string]interface{}, error) {
+	return request("chat/characters/recent/", u.Session, u.Token, http.MethodGet, nil, false, false)
 }
 
-func (u *User) Characters(token string) (map[string]interface{}, error) {
-	return request("chat/characters/?scope=user", u.Session, token, http.MethodGet, nil, false, false)
+func (u *User) Characters() (map[string]interface{}, error) {
+	return request("chat/characters/?scope=user", u.Session, u.Token, http.MethodGet, nil, false, false)
 }
 
-func (u *User) Update(username string, token string, data map[string]interface{}) (map[string]interface{}, error) {
+func (u *User) Update(username string, data map[string]interface{}) (map[string]interface{}, error) {
 	data["username"] = username
-	return request("chat/user/update/", u.Session, token, http.MethodPost, data, false, false)
+	return request("chat/user/update/", u.Session, u.Token, http.MethodPost, data, false, false)
 }

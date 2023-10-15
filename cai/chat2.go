@@ -162,7 +162,7 @@ func (c *Chat2) NewChat(char, chatID, creatorID string, withGreeting ...bool) (m
 	return response, answer, nil
 }
 
-func (s *Session) GetHistories(char string, preview int, token string) (map[string]interface{}, error) {
+func (c *Chat2) GetHistories(char string, preview int) (map[string]interface{}, error) {
 	if char == "" {
 		char = "default_char_value" // Replace with the default character value if any
 	}
@@ -171,28 +171,28 @@ func (s *Session) GetHistories(char string, preview int, token string) (map[stri
 	}
 
 	url := fmt.Sprintf("chats/?character_ids=%s&num_preview_turns=%d", char, preview)
-	return request(url, s, token, http.MethodGet, nil, false, true)
+	return request(url, c.Session, c.Token, http.MethodGet, nil, false, true)
 }
 
-func (s *Session) GetChat(char string, token string) (map[string]interface{}, error) {
+func (c *Chat2) GetChat(char string) (map[string]interface{}, error) {
 	if char == "" {
 		char = "default_char_value" // Replace with the default character value if any
 	}
 
 	url := fmt.Sprintf("chats/recent/%s", char)
-	return request(url, s, token, http.MethodGet, nil, false, true)
+	return request(url, c.Session, c.Token, http.MethodGet, nil, false, true)
 }
 
-func (s *Session) GetHistory(chatID string, token string) (map[string]interface{}, error) {
+func (c *Chat2) GetHistory(chatID string) (map[string]interface{}, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chatID cannot be empty")
 	}
 
 	url := fmt.Sprintf("turns/%s/", chatID)
-	return request(url, s, token, http.MethodGet, nil, false, true)
+	return request(url, c.Session, c.Token, http.MethodGet, nil, false, true)
 }
 
-func (s *Session) Rate(rate int, chatID string, turnID string, candidateID string, token string) (map[string]interface{}, error) {
+func (c *Chat2) Rate(rate int, chatID, turnID, candidateID string) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"turn_key": map[string]string{
 			"chat_id": chatID,
@@ -205,7 +205,7 @@ func (s *Session) Rate(rate int, chatID string, turnID string, candidateID strin
 		},
 	}
 
-	return request("annotation/create", s, token, http.MethodPost, data, false, true)
+	return request("annotation/create", c.Session, c.Token, http.MethodPost, data, false, true)
 }
 
 func (c *Chat2) DeleteMessage(chatID string, turnIDs []string) (map[string]interface{}, error) {

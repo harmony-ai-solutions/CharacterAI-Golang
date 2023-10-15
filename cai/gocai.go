@@ -69,8 +69,22 @@ func request(url string, session *Session, token string, method string, data map
 
 	// Create Headers
 	header := http.Header{
-		"Authorization": {fmt.Sprintf("Token %v", token)},
-		"Content-Type":  {"application/json"},
+		"accept":          {"application/json", "text/plain", "*/*"},
+		"accept-encoding": {"gzip", "deflate", "br"},
+		"accept-language": {"de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7"},
+		"authorization":   {fmt.Sprintf("Token %v", token)},
+		"connection":      {"keep-alive"},
+		"content-type":    {"application/json"},
+		"user-agent":      {"tls-client/0.2.2"},
+		http.HeaderOrderKey: {
+			"accept",
+			"accept-encoding",
+			"accept-language",
+			"authorization",
+			"connection",
+			"content-type",
+			"user-agent",
+		},
 	}
 
 	// Send request
@@ -94,6 +108,7 @@ func request(url string, session *Session, token string, method string, data map
 	default:
 		return nil, fmt.Errorf("method %v is currently not supported", method)
 	}
+	defer response.Body.Close()
 
 	// Check for error
 	if errRequest != nil {

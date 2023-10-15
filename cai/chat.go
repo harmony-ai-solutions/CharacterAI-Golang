@@ -11,7 +11,7 @@ type Chat struct {
 	Session *Session
 }
 
-func (c *Chat) CreateRoom(characters []string, name, topic, token string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
+func (c *Chat) CreateRoom(characters []string, name, topic string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"characters": characters,
 		"name":       name,
@@ -21,10 +21,10 @@ func (c *Chat) CreateRoom(characters []string, name, topic, token string, extraA
 	for key, val := range extraArgs {
 		data[key] = val
 	}
-	return request("../chat/room/create/", c.Session, token, http.MethodPost, data, false, false)
+	return request("../chat/room/create/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
-func (c *Chat) Rate(rate int, historyID, messageID, token string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
+func (c *Chat) Rate(rate int, historyID, messageID string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
 	var label []int
 	switch rate {
 	case 0:
@@ -46,10 +46,10 @@ func (c *Chat) Rate(rate int, historyID, messageID, token string, extraArgs map[
 	for key, val := range extraArgs {
 		data[key] = val
 	}
-	return request("chat/annotations/label/", c.Session, token, "PUT", data, false, false)
+	return request("chat/annotations/label/", c.Session, c.Token, "PUT", data, false, false)
 }
 
-func (c *Chat) NextMessage(historyID, parentMsgUUID, tgt, token string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
+func (c *Chat) NextMessage(historyID, parentMsgUUID, tgt string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"history_external_id": historyID,
 		"parent_msg_uuid":     parentMsgUUID,
@@ -58,30 +58,30 @@ func (c *Chat) NextMessage(historyID, parentMsgUUID, tgt, token string, extraArg
 	for key, val := range extraArgs {
 		data[key] = val
 	}
-	return request("chat/streaming/", c.Session, token, http.MethodPost, data, false, false)
+	return request("chat/streaming/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
-func (c *Chat) GetHistories(char string, number int, token string) (map[string]interface{}, error) {
+func (c *Chat) GetHistories(char string, number int) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"external_id": char,
 		"number":      number,
 	}
-	return request("chat/character/histories_v2/", c.Session, token, http.MethodPost, data, false, false)
+	return request("chat/character/histories_v2/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
-func (c *Chat) GetHistory(historyID, token string) (map[string]interface{}, error) {
+func (c *Chat) GetHistory(historyID string) (map[string]interface{}, error) {
 	url := fmt.Sprintf("chat/history/msgs/user/?history_external_id=%s", historyID)
-	return request(url, c.Session, token, http.MethodGet, nil, false, false)
+	return request(url, c.Session, c.Token, http.MethodGet, nil, false, false)
 }
 
-func (c *Chat) GetChat(char, token string) (map[string]interface{}, error) {
+func (c *Chat) GetChat(char string) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"character_external_id": char,
 	}
-	return request("chat/history/continue/", c.Session, token, http.MethodPost, data, false, false)
+	return request("chat/history/continue/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
-func (c *Chat) SendMessage(historyID, tgt, text, token string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
+func (c *Chat) SendMessage(historyID, tgt, text string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"history_external_id": historyID,
 		"tgt":                 tgt,
@@ -90,10 +90,10 @@ func (c *Chat) SendMessage(historyID, tgt, text, token string, extraArgs map[str
 	for key, val := range extraArgs {
 		data[key] = val
 	}
-	return request("chat/streaming/", c.Session, token, http.MethodPost, data, false, false)
+	return request("chat/streaming/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
-func (c *Chat) DeleteMessage(historyID string, uuidsToDelete []string, token string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
+func (c *Chat) DeleteMessage(historyID string, uuidsToDelete []string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"history_id":      historyID,
 		"uuids_to_delete": uuidsToDelete,
@@ -101,12 +101,12 @@ func (c *Chat) DeleteMessage(historyID string, uuidsToDelete []string, token str
 	for key, val := range extraArgs {
 		data[key] = val
 	}
-	return request("chat/history/msgs/delete/", c.Session, token, http.MethodPost, data, false, false)
+	return request("chat/history/msgs/delete/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
-func (c *Chat) NewChat(char, token string) (map[string]interface{}, error) {
+func (c *Chat) NewChat(char string) (map[string]interface{}, error) {
 	data := map[string]interface{}{
 		"character_external_id": char,
 	}
-	return request("chat/history/create/", c.Session, token, http.MethodPost, data, false, false)
+	return request("chat/history/create/", c.Session, c.Token, http.MethodPost, data, false, false)
 }

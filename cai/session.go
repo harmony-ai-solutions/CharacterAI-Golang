@@ -47,7 +47,6 @@ func (s *Session) GET(url string, headers http.Header) (*http.Response, error) {
 	if errExecute != nil {
 		return nil, errExecute
 	}
-	defer resp.Body.Close()
 	return resp, nil
 }
 
@@ -61,7 +60,6 @@ func (s *Session) POST(url string, headers http.Header, data []byte) (*http.Resp
 	if errExecute != nil {
 		return nil, errExecute
 	}
-	defer resp.Body.Close()
 	return resp, nil
 }
 
@@ -75,6 +73,5 @@ func (s *Session) PUT(url string, headers http.Header, data []byte) (*http.Respo
 	if errExecute != nil {
 		return nil, errExecute
 	}
-	defer resp.Body.Close()
 	return resp, nil
 }
