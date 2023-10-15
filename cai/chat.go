@@ -108,7 +108,7 @@ func (c *Chat) SendMessage(historyID, tgt, text string, extraArgs map[string]int
 			data[key] = val
 		}
 	}
-	return request("chat/streaming/", c.Session, c.Token, http.MethodPost, data, false, false)
+	return request("chat/streaming/", c.Session, c.Token, http.MethodPost, data, true, false)
 }
 
 func (c *Chat) DeleteMessage(historyID string, uuidsToDelete []string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
