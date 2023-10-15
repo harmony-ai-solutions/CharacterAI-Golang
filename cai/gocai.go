@@ -142,11 +142,12 @@ func request(url string, session *Session, token string, method string, data map
 	}
 	bodyString := string(bodyBytes)
 
+	// Set this to true if multiline output is to be expected.
 	if split {
+		// Ensure windows newlines are not an issue
+		bodyString = strings.ReplaceAll(bodyString, "\r\n", "\n")
 		splitted := strings.Split(bodyString, "\n")
-		if len(splitted) >= 2 {
-			bodyString = splitted[len(splitted)-2]
-		}
+		bodyString = splitted[len(splitted)-1]
 	}
 
 	var responseData map[string]interface{}
