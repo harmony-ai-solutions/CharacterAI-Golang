@@ -1,54 +1,178 @@
-// Package cai
-/*
-Copyright © 2023 Harmony AI Solutions & Contributors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cai
 
-import http "github.com/bogdanfinn/fhttp"
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+)
 
-type User struct {
-	Token   string
-	Session *Session
+// FetchUser retrieves a public user's information
+func (c *Client) FetchUser(username string) (*PublicUser, error) {
+	urlStr := "https://plus.character.ai/chat/user/public/"
+	headers := c.GetHeaders(false)
+
+	payload := map[string]string{
+		"username": username,
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 500 {
+		return nil, nil // User does not exist
+	}
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to fetch user, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	userMap, ok := result["public_user"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid response structure")
+	}
+
+	user := &PublicUser{
+		Username: userMap["username"].(string),
+		Name:     userMap["name"].(string),
+		Bio:      userMap["bio"].(string),
+	}
+
+	// Handle avatar
+	if avatarFileName, ok := userMap["avatar_file_name"].(string); ok && avatarFileName != "" {
+		user.Avatar = &Avatar{FileName: avatarFileName}
+	}
+
+	// Handle other fields
+	if numFollowers, ok := userMap["num_followers"].(float64); ok {
+		user.NumFollowers = int(numFollowers)
+	}
+	if numFollowing, ok := userMap["num_following"].(float64); ok {
+		user.NumFollowing = int(numFollowing)
+	}
+
+	// Handle characters
+	if chars, ok := userMap["characters"].([]interface{}); ok {
+		user.Characters = make([]*CharacterShort, len(chars))
+		for i, char := range chars {
+			charMap, ok := char.(map[string]interface{})
+			if ok {
+				user.Characters[i] = parseCharacterShort(charMap)
+			}
+		}
+	}
+
+	return user, nil
 }
 
-func (u *User) Info() (map[string]interface{}, error) {
-	return request("chat/user/", u.Session, u.Token, http.MethodGet, nil, false, false)
+// parseCharacterShort parses a CharacterShort from a map
+func parseCharacterShort(charMap map[string]interface{}) *CharacterShort {
+	char := &CharacterShort{
+		CharacterID:     charMap["external_id"].(string),
+		Name:            charMap["name"].(string),
+		Title:           charMap["title"].(string),
+		Greeting:        charMap["greeting"].(string),
+		Description:     charMap["description"].(string),
+		Definition:      charMap["definition"].(string),
+		Visibility:      charMap["visibility"].(string),
+		AuthorUsername:  charMap["user__username"].(string),
+		NumInteractions: charMap["participant__num_interactions"].(string),
+	}
+
+	// Handle avatar
+	if avatarFileName, ok := charMap["avatar_file_name"].(string); ok && avatarFileName != "" {
+		char.Avatar = &Avatar{FileName: avatarFileName}
+	}
+
+	return char
 }
 
-func (u *User) GetProfile(username string) (map[string]interface{}, error) {
-	data := map[string]interface{}{"username": username}
-	return request("chat/user/public/", u.Session, u.Token, http.MethodPost, data, false, false)
+// FollowUser follows a user
+func (c *Client) FollowUser(username string) error {
+	urlStr := "https://plus.character.ai/chat/user/follow/"
+	headers := c.GetHeaders(false)
+
+	payload := map[string]string{
+		"username": username,
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("failed to follow user, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return err
+	}
+
+	if status, ok := result["status"].(string); !ok || status != "OK" {
+		return errors.New("failed to follow user")
+	}
+
+	return nil
 }
 
-func (u *User) Followers() (map[string]interface{}, error) {
-	return request("chat/user/followers/", u.Session, u.Token, http.MethodGet, nil, false, false)
-}
+// UnfollowUser unfollows a user
+func (c *Client) UnfollowUser(username string) error {
+	urlStr := "https://plus.character.ai/chat/user/unfollow/"
+	headers := c.GetHeaders(false)
 
-func (u *User) Following() (map[string]interface{}, error) {
-	return request("chat/user/following/", u.Session, u.Token, http.MethodGet, nil, false, false)
-}
+	payload := map[string]string{
+		"username": username,
+	}
+	bodyBytes, _ := json.Marshal(payload)
 
-func (u *User) Recent() (map[string]interface{}, error) {
-	return request("chat/characters/recent/", u.Session, u.Token, http.MethodGet, nil, false, false)
-}
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
 
-func (u *User) Characters() (map[string]interface{}, error) {
-	return request("chat/characters/?scope=user", u.Session, u.Token, http.MethodGet, nil, false, false)
-}
+	if resp.StatusCode != 200 {
+		return fmt.Errorf("failed to unfollow user, status code: %d", resp.StatusCode)
+	}
 
-func (u *User) Update(username string, data map[string]interface{}) (map[string]interface{}, error) {
-	data["username"] = username
-	return request("chat/user/update/", u.Session, u.Token, http.MethodPost, data, false, false)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return err
+	}
+
+	if status, ok := result["status"].(string); !ok || status != "OK" {
+		return errors.New("failed to unfollow user")
+	}
+
+	return nil
 }

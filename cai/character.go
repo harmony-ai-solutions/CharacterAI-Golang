@@ -1,92 +1,75 @@
-// Package cai
-/*
-Copyright © 2023 Harmony AI Solutions & Contributors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cai
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
-	http "github.com/bogdanfinn/fhttp"
 )
 
-type Character struct {
-	Token   string
-	Session *Session
-}
+// FetchCharacterInfo retrieves information about a character
+func (c *Client) FetchCharacterInfo(characterID string) (*Character, error) {
+	url := "https://plus.character.ai/chat/character/info/"
+	headers := c.GetHeaders(false)
 
-func (c *Character) Create(greeting, identifier, name, avatarRelPath, baseImgPrompt, definition, description, title, visibility, token string, categories []string, copyable, imgGenEnabled bool, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"greeting":        greeting,
-		"identifier":      identifier,
-		"name":            name,
-		"avatar_rel_path": avatarRelPath,
-		"base_img_prompt": baseImgPrompt,
-		"categories":      categories,
-		"copyable":        copyable,
-		"definition":      definition,
-		"description":     description,
-		"img_gen_enabled": imgGenEnabled,
-		"title":           title,
-		"visibility":      visibility,
+	payload := map[string]string{
+		"external_id": characterID,
 	}
-	for key, val := range extraArgs {
-		data[key] = val
+	bodyBytes, _ := json.Marshal(payload)
+
+	resp, err := c.Requester.Post(url, headers, bodyBytes)
+	if err != nil {
+		return nil, err
 	}
-	return request("../chat/character/create/", c.Session, token, http.MethodPost, data, false, false)
-}
+	defer resp.Body.Close()
 
-func (c *Character) Update(externalID, greeting, identifier, name, title, definition, description, visibility, token string, categories []string, copyable bool, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"external_id": externalID,
-		"name":        name,
-		"categories":  categories,
-		"title":       title,
-		"visibility":  visibility,
-		"copyable":    copyable,
-		"description": description,
-		"greeting":    greeting,
-		"definition":  definition,
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("failed to fetch character info, status code: %d", resp.StatusCode)
 	}
-	for key, val := range extraArgs {
-		data[key] = val
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
 	}
-	return request("../chat/character/update/", c.Session, token, http.MethodPost, data, false, false)
-}
 
-func (c *Character) Trending() (map[string]interface{}, error) {
-	return request("chat/characters/trending/", c.Session, "", http.MethodGet, nil, false, false)
-}
+	var result map[string]interface{}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
 
-func (c *Character) Recommended(token string) (map[string]interface{}, error) {
-	return request("chat/characters/recommended/", c.Session, token, http.MethodGet, nil, false, false)
-}
+	status, _ := result["status"].(string)
+	if status == "NOT_OK" {
+		errorMsg, _ := result["error"].(string)
+		return nil, fmt.Errorf("error fetching character info: %s", errorMsg)
+	}
 
-func (c *Character) Categories() (map[string]interface{}, error) {
-	return request("chat/character/categories/", c.Session, "", http.MethodGet, nil, false, false)
-}
+	characterMap, ok := result["character"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid response structure")
+	}
 
-func (c *Character) Info(char, token string) (map[string]interface{}, error) {
-	data := map[string]interface{}{"external_id": char}
-	return request("chat/character/", c.Session, token, http.MethodPost, data, false, false)
-}
+	character := &Character{
+		CharacterID:     characterMap["external_id"].(string),
+		Name:            characterMap["name"].(string),
+		Title:           characterMap["title"].(string),
+		Greeting:        characterMap["greeting"].(string),
+		Description:     characterMap["description"].(string),
+		Definition:      characterMap["definition"].(string),
+		Visibility:      characterMap["visibility"].(string),
+		AuthorUsername:  characterMap["user__username"].(string),
+		NumInteractions: characterMap["participant__num_interactions"].(string),
+		Copyable:        characterMap["copyable"].(bool),
+		Identifier:      characterMap["identifier"].(string),
+		ImgGenEnabled:   characterMap["img_gen_enabled"].(bool),
+		BaseImgPrompt:   characterMap["base_img_prompt"].(string),
+		ImgPromptRegex:  characterMap["img_prompt_regex"].(string),
+		StripImgPrompt:  characterMap["strip_img_prompt_from_msg"].(bool),
+	}
 
-func (c *Character) Search(query, token string) (map[string]interface{}, error) {
-	url := fmt.Sprintf("chat/characters/search/?query=%s/", query)
-	return request(url, c.Session, token, http.MethodGet, nil, false, false)
-}
+	// Handle avatar
+	if avatarFileName, ok := characterMap["avatar_file_name"].(string); ok && avatarFileName != "" {
+		character.Avatar = &Avatar{FileName: avatarFileName}
+	}
 
-func (c *Character) Voices() (map[string]interface{}, error) {
-	return request("chat/character/voices/", c.Session, "", http.MethodGet, nil, false, false)
+	return character, nil
 }
