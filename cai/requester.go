@@ -71,12 +71,12 @@ func (r *Requester) DoRequest(method, urlStr string, headers map[string]string, 
 
 // Get performs a GET request
 func (r *Requester) Get(urlStr string, headers map[string]string) (*http.Response, error) {
-	return r.DoRequest("GET", urlStr, headers, nil)
+	return r.DoRequest(http.MethodGet, urlStr, headers, nil)
 }
 
 // Post performs a POST request
 func (r *Requester) Post(urlStr string, headers map[string]string, body []byte) (*http.Response, error) {
-	return r.DoRequest("POST", urlStr, headers, body)
+	return r.DoRequest(http.MethodPost, urlStr, headers, body)
 }
 
 // InitializeWebSocket initializes the WebSocket connection

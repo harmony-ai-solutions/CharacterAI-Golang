@@ -3,12 +3,14 @@
 package cai
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 )
 
 // FetchMe retrieves the account information.
@@ -26,7 +28,7 @@ func (c *Client) FetchMe() (*Account, error) {
 		return nil, fmt.Errorf("failed to fetch account info, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +67,7 @@ func (c *Client) FetchMySettings() (*Settings, error) {
 		return nil, fmt.Errorf("failed to fetch settings, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +96,7 @@ func (c *Client) FetchMyFollowers() ([]*PublicUser, error) {
 		return nil, fmt.Errorf("failed to fetch followers, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +127,7 @@ func (c *Client) FetchMyFollowing() ([]*PublicUser, error) {
 		return nil, fmt.Errorf("failed to fetch following, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +158,7 @@ func (c *Client) FetchMyPersonas() ([]*Character, error) {
 		return nil, fmt.Errorf("failed to fetch personas, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +189,7 @@ func (c *Client) FetchMyCharacters() ([]*CharacterShort, error) {
 		return nil, fmt.Errorf("failed to fetch characters, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +220,7 @@ func (c *Client) FetchMyUpvotedCharacters() ([]*CharacterShort, error) {
 		return nil, fmt.Errorf("failed to fetch upvoted characters, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +251,7 @@ func (c *Client) FetchMyVoices() ([]*Voice, error) {
 		return nil, fmt.Errorf("failed to fetch voices, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +287,7 @@ func (c *Client) UpdateSettings(newSettings *Settings) (*Settings, error) {
 		return nil, fmt.Errorf("failed to update settings, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +352,7 @@ func (c *Client) EditAccount(name string, username string, bio string, avatarRel
 		return fmt.Errorf("failed to edit account, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -386,7 +388,7 @@ func (c *Client) FetchMyPersona(personaID string) (*Persona, error) {
 		return nil, fmt.Errorf("failed to fetch persona, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +454,7 @@ func (c *Client) CreatePersona(name string, definition string, avatarRelPath str
 		return nil, fmt.Errorf("failed to create persona, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -540,7 +542,7 @@ func (c *Client) EditPersona(personaID string, name string, definition string, a
 		return nil, fmt.Errorf("failed to edit persona, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -608,7 +610,7 @@ func (c *Client) DeletePersona(personaID string) error {
 		return fmt.Errorf("failed to delete persona, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
@@ -694,8 +696,8 @@ func (c *Client) SetVoice(characterID string, voiceID string) error {
 	urlStr := fmt.Sprintf("https://plus.character.ai/chat/character/%s/voice_override/update/", characterID)
 	headers := c.GetHeaders(false)
 
-	payload := map[string]string{
-		"voice_id": voiceID,
+	payload := SetVoicePayload{
+		VoiceID: voiceID,
 	}
 
 	bodyBytes, err := json.Marshal(payload)
@@ -713,15 +715,12 @@ func (c *Client) SetVoice(characterID string, voiceID string) error {
 		return fmt.Errorf("failed to set voice, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 
-	var result struct {
-		Success bool   `json:"success"`
-		Error   string `json:"error"`
-	}
+	var result SetVoiceResponse
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return err
@@ -749,15 +748,12 @@ func (c *Client) UnsetVoice(characterID string) error {
 		return fmt.Errorf("failed to unset voice, status code: %d", resp.StatusCode)
 	}
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 
-	var result struct {
-		Success bool   `json:"success"`
-		Error   string `json:"error"`
-	}
+	var result SetVoiceResponse
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return err
@@ -768,4 +764,90 @@ func (c *Client) UnsetVoice(characterID string) error {
 	}
 
 	return nil
+}
+
+// UploadAvatar uploads a new avatar for the user.
+// The imagePath can be a local file path or a URL.
+// The checkImage parameter determines whether to verify the uploaded image.
+func (c *Client) UploadAvatar(imagePath string, checkImage bool) (*Avatar, error) {
+	var imageData []byte
+	var err error
+
+	if _, err = os.Stat(imagePath); err == nil {
+		// It's a file path
+		imageData, err = os.ReadFile(imagePath)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// Try to treat it as a URL
+		resp, err := c.Requester.Get(imagePath, nil)
+		if err != nil {
+			return nil, errors.New("invalid image path or URL")
+		}
+		defer resp.Body.Close()
+		imageData, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	mimeType := http.DetectContentType(imageData)
+	dataURI := fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(imageData))
+
+	urlStr := "https://character.ai/api/trpc/user.uploadAvatar?batch=1"
+	headers := c.GetHeaders(true)
+
+	// Prepare the payload using the defined structs
+	avatarPayload := UploadAvatarRequest{
+		"0": AvatarRequestItem{
+			JSON: AvatarJSON{
+				ImageDataURL: dataURI,
+			},
+		},
+	}
+	bodyBytes, err := json.Marshal(avatarPayload)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to upload avatar, status code: %d", resp.StatusCode)
+	}
+
+	bodyResp, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response []UploadAvatarResponse
+	err = json.Unmarshal(bodyResp, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(response) == 0 || response[0].Result.Data.JSON == "" {
+		return nil, errors.New("failed to upload avatar, file name not returned")
+	}
+
+	fileName := response[0].Result.Data.JSON
+	avatar := &Avatar{FileName: fileName}
+
+	if checkImage {
+		size := 150
+		imageURL := avatar.GetURL(size, false)
+
+		resp, err := c.Requester.Get(imageURL, nil)
+		if err != nil || resp.StatusCode != http.StatusOK {
+			return nil, errors.New("uploaded avatar did not pass the filter or is invalid")
+		}
+	}
+
+	return avatar, nil
 }

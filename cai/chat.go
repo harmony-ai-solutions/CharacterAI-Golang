@@ -169,12 +169,6 @@ func (c *Client) CreateChat(characterID string, greeting bool) (*Chat, *Turn, er
 	}
 }
 
-// Helper function to parse time from string
-func parseTime(timeStr string) time.Time {
-	t, _ := time.Parse(time.RFC3339Nano, timeStr)
-	return t
-}
-
 // FetchHistories retrieves chat histories for a character
 func (c *Client) FetchHistories(characterID string, amount int) ([]ChatHistory, error) {
 	urlStr := "https://plus.character.ai/chat/character/histories/"
@@ -237,7 +231,7 @@ func (c *Client) FetchChats(characterID string, numPreviewTurns int) ([]*Chat, e
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch chats, status code: %d", resp.StatusCode)
 	}
 
@@ -276,7 +270,7 @@ func (c *Client) FetchChat(chatID string) (*Chat, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch chat, status code: %d", resp.StatusCode)
 	}
 
@@ -322,7 +316,7 @@ func (c *Client) FetchRecentChats() ([]*Chat, error) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch recent chats, status code: %d", resp.StatusCode)
 	}
 
@@ -413,10 +407,13 @@ func (c *Client) UpdateChatName(chatID string, name string) error {
 	urlStr := fmt.Sprintf("https://neo.character.ai/chat/%s/update_name", chatID)
 	headers := c.GetHeaders(false)
 
-	payload := map[string]string{
-		"name": name,
+	payload := UpdateChatNamePayload{
+		Name: name,
 	}
-	bodyBytes, _ := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
 
 	resp, err := c.Requester.DoRequest("PATCH", urlStr, headers, bodyBytes)
 	if err != nil {
@@ -424,7 +421,7 @@ func (c *Client) UpdateChatName(chatID string, name string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to update chat name, status code: %d", resp.StatusCode)
 	}
 
@@ -442,7 +439,7 @@ func (c *Client) ArchiveChat(chatID string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to archive chat, status code: %d", resp.StatusCode)
 	}
 
@@ -460,7 +457,7 @@ func (c *Client) UnarchiveChat(chatID string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to unarchive chat, status code: %d", resp.StatusCode)
 	}
 

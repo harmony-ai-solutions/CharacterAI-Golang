@@ -2,8 +2,10 @@ package cai
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 )
 
 // FetchUser retrieves a public user's information
@@ -11,10 +13,13 @@ func (c *Client) FetchUser(username string) (*PublicUser, error) {
 	urlStr := "https://plus.character.ai/chat/user/public/"
 	headers := c.GetHeaders(false)
 
-	payload := map[string]string{
-		"username": username,
+	payload := FetchUserRequest{
+		Username: username,
 	}
-	bodyBytes, _ := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
 
 	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
 	if err != nil {
@@ -26,7 +31,7 @@ func (c *Client) FetchUser(username string) (*PublicUser, error) {
 		return nil, nil // User does not exist
 	}
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch user, status code: %d", resp.StatusCode)
 	}
 
@@ -35,70 +40,17 @@ func (c *Client) FetchUser(username string) (*PublicUser, error) {
 		return nil, err
 	}
 
-	var result map[string]interface{}
+	var result FetchUserResponse
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return nil, err
 	}
 
-	userMap, ok := result["public_user"].(map[string]interface{})
-	if !ok {
-		return nil, errors.New("invalid response structure")
+	if result.PublicUser == nil {
+		return nil, fmt.Errorf("failed to fetch user, public user data is missing")
 	}
 
-	user := &PublicUser{
-		Username: userMap["username"].(string),
-		Name:     userMap["name"].(string),
-		Bio:      userMap["bio"].(string),
-	}
-
-	// Handle avatar
-	if avatarFileName, ok := userMap["avatar_file_name"].(string); ok && avatarFileName != "" {
-		user.Avatar = &Avatar{FileName: avatarFileName}
-	}
-
-	// Handle other fields
-	if numFollowers, ok := userMap["num_followers"].(float64); ok {
-		user.NumFollowers = int(numFollowers)
-	}
-	if numFollowing, ok := userMap["num_following"].(float64); ok {
-		user.NumFollowing = int(numFollowing)
-	}
-
-	// Handle characters
-	if chars, ok := userMap["characters"].([]interface{}); ok {
-		user.Characters = make([]*CharacterShort, len(chars))
-		for i, char := range chars {
-			charMap, ok := char.(map[string]interface{})
-			if ok {
-				user.Characters[i] = parseCharacterShort(charMap)
-			}
-		}
-	}
-
-	return user, nil
-}
-
-// parseCharacterShort parses a CharacterShort from a map
-func parseCharacterShort(charMap map[string]interface{}) *CharacterShort {
-	char := &CharacterShort{
-		CharacterID:     charMap["external_id"].(string),
-		Name:            charMap["name"].(string),
-		Title:           charMap["title"].(string),
-		Greeting:        charMap["greeting"].(string),
-		Description:     charMap["description"].(string),
-		Definition:      charMap["definition"].(string),
-		Visibility:      charMap["visibility"].(string),
-		AuthorUsername:  charMap["user__username"].(string),
-		NumInteractions: charMap["participant__num_interactions"].(string),
-	}
-
-	// Handle avatar
-	if avatarFileName, ok := charMap["avatar_file_name"].(string); ok && avatarFileName != "" {
-		char.Avatar = &Avatar{FileName: avatarFileName}
-	}
-
-	return char
+	return result.PublicUser, nil
 }
 
 // FollowUser follows a user
@@ -106,10 +58,13 @@ func (c *Client) FollowUser(username string) error {
 	urlStr := "https://plus.character.ai/chat/user/follow/"
 	headers := c.GetHeaders(false)
 
-	payload := map[string]string{
-		"username": username,
+	payload := FollowUserRequest{
+		Username: username,
 	}
-	bodyBytes, _ := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
 
 	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
 	if err != nil {
@@ -117,7 +72,7 @@ func (c *Client) FollowUser(username string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to follow user, status code: %d", resp.StatusCode)
 	}
 
@@ -126,14 +81,14 @@ func (c *Client) FollowUser(username string) error {
 		return err
 	}
 
-	var result map[string]interface{}
+	var result FollowUserResponse
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return err
 	}
 
-	if status, ok := result["status"].(string); !ok || status != "OK" {
-		return errors.New("failed to follow user")
+	if result.Status != "OK" {
+		return fmt.Errorf("failed to follow user, error: %s", result.Error)
 	}
 
 	return nil
@@ -144,10 +99,13 @@ func (c *Client) UnfollowUser(username string) error {
 	urlStr := "https://plus.character.ai/chat/user/unfollow/"
 	headers := c.GetHeaders(false)
 
-	payload := map[string]string{
-		"username": username,
+	payload := FollowUserRequest{
+		Username: username,
 	}
-	bodyBytes, _ := json.Marshal(payload)
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
 
 	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
 	if err != nil {
@@ -155,7 +113,7 @@ func (c *Client) UnfollowUser(username string) error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to unfollow user, status code: %d", resp.StatusCode)
 	}
 
@@ -164,15 +122,44 @@ func (c *Client) UnfollowUser(username string) error {
 		return err
 	}
 
-	var result map[string]interface{}
+	var result FollowUserResponse
 	err = json.Unmarshal(body, &result)
 	if err != nil {
 		return err
 	}
 
-	if status, ok := result["status"].(string); !ok || status != "OK" {
-		return errors.New("failed to unfollow user")
+	if result.Status != "OK" {
+		return fmt.Errorf("failed to unfollow user, error: %s", result.Error)
 	}
 
 	return nil
+}
+
+// FetchUserVoices retrieves the voices created by a public user.
+func (c *Client) FetchUserVoices(username string) ([]*Voice, error) {
+	urlStr := fmt.Sprintf("https://neo.character.ai/multimodal/api/v1/voices/search?creatorInfo.username=%s", url.QueryEscape(username))
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch user voices, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result SearchVoicesResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Voices, nil
 }

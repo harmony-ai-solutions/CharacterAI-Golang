@@ -2,7 +2,6 @@ package cai
 
 import (
 	"fmt"
-	"github.com/google/uuid"
 	"sync"
 )
 
@@ -50,9 +49,4 @@ func (c *Client) GetHeaders(includeWebNextAuth bool) map[string]string {
 // Close cleans up the client, closing any open connections
 func (c *Client) Close() error {
 	return c.Requester.CloseWebSocket()
-}
-
-// Helper function to generate a UUID
-func generateUUID() string {
-	return uuid.New().String()
 }

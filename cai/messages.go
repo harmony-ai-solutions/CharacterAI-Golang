@@ -214,3 +214,240 @@ type DeletePersonaResult struct {
 	Persona *Persona `json:"persona"`
 	Error   string   `json:"error"`
 }
+
+// CreateCharacterPayload represents the payload for creating a character.
+type CreateCharacterPayload struct {
+	Name                  string   `json:"name"`
+	Title                 string   `json:"title"`
+	Definition            string   `json:"definition"`
+	Greeting              string   `json:"greeting"`
+	Description           string   `json:"description"`
+	Visibility            string   `json:"visibility"`
+	AvatarRelPath         string   `json:"avatar_rel_path,omitempty"`
+	BaseImgPrompt         string   `json:"base_img_prompt"`
+	Categories            []string `json:"categories"`
+	Copyable              bool     `json:"copyable"`
+	DefaultVoiceID        string   `json:"default_voice_id"`
+	Identifier            string   `json:"identifier"`
+	ImgGenEnabled         bool     `json:"img_gen_enabled"`
+	StripImgPromptFromMsg bool     `json:"strip_img_prompt_from_msg"`
+	VoiceID               string   `json:"voice_id"`
+}
+
+// CreateCharacterResult represents the result of creating a character.
+type CreateCharacterResult struct {
+	Status    string     `json:"status"`
+	Character *Character `json:"character"`
+	Error     string     `json:"error"`
+}
+
+// EditCharacterPayload represents the payload for editing a character.
+type EditCharacterPayload struct {
+	ExternalID            string   `json:"external_id"`
+	Name                  string   `json:"name"`
+	Title                 string   `json:"title"`
+	Definition            string   `json:"definition"`
+	Greeting              string   `json:"greeting"`
+	Description           string   `json:"description"`
+	Visibility            string   `json:"visibility"`
+	AvatarRelPath         string   `json:"avatar_rel_path,omitempty"`
+	BaseImgPrompt         string   `json:"base_img_prompt"`
+	Categories            []string `json:"categories"`
+	Copyable              bool     `json:"copyable"`
+	DefaultVoiceID        string   `json:"default_voice_id"`
+	ImgGenEnabled         bool     `json:"img_gen_enabled"`
+	StripImgPromptFromMsg bool     `json:"strip_img_prompt_from_msg"`
+	VoiceID               string   `json:"voice_id"`
+	Archived              bool     `json:"archived"`
+}
+
+// EditCharacterResult represents the result of editing a character.
+type EditCharacterResult struct {
+	Status    string     `json:"status"`
+	Character *Character `json:"character"`
+	Error     string     `json:"error"`
+}
+
+// CharacterInfoPayload represents the request payload for fetching character info.
+type CharacterInfoPayload struct {
+	ExternalID string `json:"external_id"`
+}
+
+// CharacterInfoResponse represents the response payload for fetching character info.
+type CharacterInfoResponse struct {
+	Status    string     `json:"status"`
+	Character *Character `json:"character"`
+	Error     string     `json:"error"`
+}
+
+// CharacterVotePayload represents the request payload for voting on a character.
+type CharacterVotePayload struct {
+	ExternalID string `json:"external_id"`
+	Vote       *bool  `json:"vote"` // Pointer to bool to handle nil (removing vote)
+}
+
+// CharacterVoteResponse represents the response payload after voting.
+type CharacterVoteResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error"`
+}
+
+// SearchCreatorsResponse represents the response payload for searching creators.
+type SearchCreatorsResponse struct {
+	Status   string    `json:"status"`
+	Creators []Creator `json:"creators"`
+	HasMore  bool      `json:"has_more"`
+	Error    string    `json:"error"`
+}
+
+// Creator represents a creator in the system.
+type Creator struct {
+	Name string `json:"name"`
+}
+
+// SearchVoicesResponse represents the response for searching voices.
+type SearchVoicesResponse struct {
+	Voices []*Voice `json:"voices"`
+}
+
+// FetchVoiceResponse represents the response for fetching a voice.
+type FetchVoiceResponse struct {
+	Voice *Voice `json:"voice"`
+}
+
+// UploadVoiceResponse represents the response after uploading or editing a voice.
+type UploadVoiceResponse struct {
+	Voice *Voice `json:"voice"`
+}
+
+// VoiceUpdatePayload represents the payload for updating a voice.
+type VoiceUpdatePayload struct {
+	Voice VoiceInfo `json:"voice"`
+}
+
+// VoiceInfo represents the voice information for updates.
+type VoiceInfo struct {
+	AudioSourceType string       `json:"audioSourceType"`
+	BackendID       string       `json:"backendId"`
+	BackendProvider string       `json:"backendProvider"`
+	CreatorInfo     *CreatorInfo `json:"creatorInfo"`
+	Description     string       `json:"description"`
+	Gender          string       `json:"gender"`
+	ID              string       `json:"id"`
+	InternalStatus  string       `json:"internalStatus"`
+	LastUpdateTime  string       `json:"lastUpdateTime"`
+	Name            string       `json:"name"`
+	PreviewAudioURI string       `json:"previewAudioURI"`
+	PreviewText     string       `json:"previewText"`
+	Visibility      string       `json:"visibility"`
+}
+
+// GenerateSpeechPayload represents the payload for generating speech.
+type GenerateSpeechPayload struct {
+	CandidateID string `json:"candidateId"`
+	RoomID      string `json:"roomId"`
+	TurnID      string `json:"turnId"`
+	VoiceID     string `json:"voiceId"`
+}
+
+// GenerateSpeechResponse represents the response from generating speech.
+type GenerateSpeechResponse struct {
+	ReplayURL string `json:"replayUrl"`
+}
+
+// ErrorResponse represents an error response from the API.
+type ErrorResponse struct {
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+// FetchUserRequest represents the request payload for fetching a user's public information.
+type FetchUserRequest struct {
+	Username string `json:"username"`
+}
+
+// FetchUserResponse represents the response payload when fetching a user's public information.
+type FetchUserResponse struct {
+	PublicUser *PublicUser `json:"public_user"`
+}
+
+// FollowUserRequest represents the request payload for following/unfollowing a user.
+type FollowUserRequest struct {
+	Username string `json:"username"`
+}
+
+// FollowUserResponse represents the response payload after following/unfollowing a user.
+type FollowUserResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error,omitempty"`
+}
+
+// GenerateImageRequest represents the request payload for generating images.
+type GenerateImageRequest struct {
+	Prompt        string `json:"prompt"`
+	NumCandidates int    `json:"num_candidates"`
+	ModelVersion  string `json:"model_version"`
+}
+
+type GenerateImageResponse struct {
+	Result []ImageResult `json:"result"`
+}
+
+// ImageResult represents a single image result.
+type ImageResult struct {
+	URL string `json:"url"`
+}
+
+// UploadAvatarRequest represents the request payload when uploading an avatar.
+type UploadAvatarRequest map[string]AvatarRequestItem
+
+// AvatarRequestItem represents a single request item in the avatar upload payload.
+type AvatarRequestItem struct {
+	JSON AvatarJSON `json:"json"`
+}
+
+// AvatarJSON contains the image data URL.
+type AvatarJSON struct {
+	ImageDataURL string `json:"imageDataUrl"`
+}
+
+// UploadAvatarResponse represents the response when uploading an avatar.
+type UploadAvatarResponse struct {
+	Result struct {
+		Data struct {
+			JSON string `json:"json"`
+		} `json:"data"`
+	} `json:"result"`
+}
+
+// UploadVoiceMetadata represents the metadata for uploading a voice.
+type UploadVoiceMetadata struct {
+	Voice UploadVoiceInfo `json:"voice"`
+}
+
+// UploadVoiceInfo represents the voice information for upload.
+type UploadVoiceInfo struct {
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	Gender          string `json:"gender"`
+	Visibility      string `json:"visibility"`
+	PreviewText     string `json:"previewText"`
+	AudioSourceType string `json:"audioSourceType"`
+}
+
+// UpdateChatNamePayload represents the payload for updating the chat name.
+type UpdateChatNamePayload struct {
+	Name string `json:"name"`
+}
+
+// SetVoicePayload represents the payload for setting a voice override.
+type SetVoicePayload struct {
+	VoiceID string `json:"voice_id"`
+}
+
+// SetVoiceResponse represents the response after setting a voice override.
+type SetVoiceResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error"`
+}
