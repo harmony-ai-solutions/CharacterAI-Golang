@@ -38,7 +38,7 @@ func (c *Client) SendMessage(characterID, chatID, text string) (*Turn, error) {
 			UserName:            "",
 			Turn: TurnPayload{
 				Author: AuthorPayload{
-					AuthorID: c.AccountID,
+					AuthorID: c.UserAccountID,
 					IsHuman:  true,
 					Name:     "",
 				},
@@ -111,7 +111,7 @@ func (c *Client) CreateChat(characterID string, greeting bool) (*Chat, *Turn, er
 		Payload: CreateChatPayload{
 			Chat: ChatPayload{
 				ChatID:      chatID,
-				CreatorID:   c.AccountID,
+				CreatorID:   c.UserAccountID,
 				Visibility:  "VISIBILITY_PRIVATE",
 				CharacterID: characterID,
 				Type:        "TYPE_ONE_ON_ONE",
@@ -147,7 +147,7 @@ func (c *Client) CreateChat(characterID string, greeting bool) (*Chat, *Turn, er
 			return nil, nil, errors.New(response.Comment)
 		case "create_chat_response":
 			var payload CreateChatResponsePayload
-			err = json.Unmarshal(response.Payload, &payload)
+			err = json.Unmarshal(responseBytes, &payload)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -159,7 +159,7 @@ func (c *Client) CreateChat(characterID string, greeting bool) (*Chat, *Turn, er
 			// Continue to wait for greeting turn
 		case "add_turn":
 			var payload TurnResponsePayload
-			err = json.Unmarshal(response.Payload, &payload)
+			err = json.Unmarshal(responseBytes, &payload)
 			if err != nil {
 				return nil, nil, err
 			}

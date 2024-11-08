@@ -62,7 +62,9 @@ type ChatPayload struct {
 }
 
 type CreateChatResponsePayload struct {
-	Chat Chat `json:"chat"`
+	Chat      Chat   `json:"chat"`
+	Command   string `json:"command"`
+	RequestID string `json:"request_id"`
 }
 
 type UpdatePrimaryCandidatePayload struct {
@@ -140,12 +142,12 @@ type NotificationsResponsePayload struct {
 }
 
 type AccountInfoResponsePayload struct {
-	Account Account `json:"account"`
+	Account UserAccount `json:"account"`
 }
 
 // FetchMeResponse represents the response from the FetchMe API call
 type FetchMeResponse struct {
-	User Account `json:"user"`
+	User UserAccount `json:"user"`
 }
 
 type GenerateTurnCandidatePayload struct {

@@ -6,30 +6,44 @@ import (
 	"time"
 )
 
-// Account represents a user account.
+// UserAccount represents a user account.
+type UserAccount struct {
+	User                     *User    `json:"user"`
+	IsHuman                  bool     `json:"is_human"`
+	Name                     string   `json:"name"`
+	Email                    string   `json:"email"`
+	NeedsToAcknowledgePolicy bool     `json:"needs_to_acknowledge_policy"`
+	SuspendedUntil           string   `json:"suspended_until"`
+	HiddenCharacters         []string `json:"hidden_characters"`
+	BlockedUsers             []string `json:"blocked_users"`
+	Bio                      string   `json:"bio"`
+	Interests                string   `json:"interests"`
+	DateOfBirth              string   `json:"date_of_birth"`
+}
+
+// User represents the inner "user" object in the JSON.
+type User struct {
+	Username     string   `json:"username"`
+	ID           int64    `json:"id"`
+	FirstName    string   `json:"first_name"`
+	Account      *Account `json:"account"`
+	IsStaff      bool     `json:"is_staff"`
+	Subscription bool     `json:"subscription"`
+	Entitlements []string `json:"entitlements"`
+}
+
+// Account represents the "account" object inside the inner user.
 type Account struct {
-	AccountID      string       `json:"id"`
-	Username       string       `json:"username"`
-	Name           string       `json:"-"`
-	Bio            string       `json:"bio"`
-	AvatarFileName string       `json:"avatar_file_name"`
-	Avatar         *Avatar      `json:"-"`
-	FirstName      string       `json:"first_name"`
-	AvatarType     string       `json:"-"`
-	IsHuman        bool         `json:"is_human"`
-	Email          string       `json:"email"`
-	AccountData    *AccountData `json:"account,omitempty"`
+	Name                     string `json:"name"`
+	AvatarType               string `json:"avatar_type"`
+	OnboardingComplete       bool   `json:"onboarding_complete"`
+	AvatarFileName           string `json:"avatar_file_name"`
+	MobileOnboardingComplete bool   `json:"mobile_onboarding_complete,omitempty"`
 }
 
-// AccountData represents nested account information.
-type AccountData struct {
-	Name       string `json:"name"`
-	AvatarType string `json:"avatar_type"`
-}
-
-// UnmarshalJSON custom unmarshalling for Account to handle nested account data.
-func (a *Account) UnmarshalJSON(data []byte) error {
-	type Alias Account // Create an alias to prevent infinite recursion
+// UnmarshalJSON custom unmarshalling for UserAccount to handle nested account data.
+func (a *UserAccount) UnmarshalJSON(data []byte) error {
+	type Alias UserAccount // Create an alias to prevent infinite recursion
 	aux := &struct {
 		*Alias
 	}{
@@ -38,17 +52,6 @@ func (a *Account) UnmarshalJSON(data []byte) error {
 
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
-	}
-
-	// Set Name and AvatarType from AccountData if available
-	if a.AccountData != nil {
-		a.Name = a.AccountData.Name
-		a.AvatarType = a.AccountData.AvatarType
-	}
-
-	// Create Avatar instance if AvatarFileName is provided
-	if a.AvatarFileName != "" {
-		a.Avatar = &Avatar{FileName: a.AvatarFileName}
 	}
 
 	return nil
@@ -458,10 +461,10 @@ type Chat struct {
 	State              string    `json:"state"`
 	ChatType           string    `json:"type"`
 	Visibility         string    `json:"visibility"`
-	PreviewTurns       []*Turn   `json:"preview_turns"`
-	ChatName           string    `json:"name"`
-	CharacterName      string    `json:"character_name"`
-	CharacterAvatarURI string    `json:"character_avatar_uri"`
+	PreviewTurns       []*Turn   `json:"preview_turns,omitempty"`
+	ChatName           string    `json:"name,omitempty"`
+	CharacterName      string    `json:"character_name,omitempty"`
+	CharacterAvatarURI string    `json:"character_avatar_uri,omitempty"`
 	CharacterAvatar    *Avatar   `json:"-"`
 }
 

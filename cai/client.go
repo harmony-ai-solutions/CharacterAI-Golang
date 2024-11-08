@@ -2,16 +2,17 @@ package cai
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 )
 
 // Client is the main client structure
 type Client struct {
-	Token       string
-	WebNextAuth string
-	AccountID   string
-	Requester   *Requester
-	mutex       sync.Mutex
+	Token         string
+	WebNextAuth   string
+	UserAccountID string
+	Requester     *Requester
+	mutex         sync.Mutex
 }
 
 // NewClient creates a new Client instance
@@ -30,7 +31,7 @@ func (c *Client) Authenticate() error {
 	if err != nil {
 		return err
 	}
-	c.AccountID = account.AccountID
+	c.UserAccountID = strconv.FormatInt(account.User.ID, 10)
 	return nil
 }
 

@@ -14,7 +14,7 @@ import (
 )
 
 // FetchMe retrieves the account information.
-func (c *Client) FetchMe() (*Account, error) {
+func (c *Client) FetchMe() (*UserAccount, error) {
 	urlStr := "https://beta.character.ai/chat/user/"
 	headers := c.GetHeaders(false)
 
@@ -48,7 +48,7 @@ func (c *Client) FetchMe() (*Account, error) {
 }
 
 // GetSelf is an alias for FetchMe.
-func (c *Client) GetSelf() (*Account, error) {
+func (c *Client) GetSelf() (*UserAccount, error) {
 	return c.FetchMe()
 }
 
