@@ -241,17 +241,18 @@ func (v *Voice) UnmarshalJSON(data []byte) error {
 type CharacterShort struct {
 	CharacterID     string  `json:"external_id"`
 	Title           string  `json:"title"`
-	Name            string  `json:"-"`
-	ParticipantName string  `json:"participant__name"`
-	Visibility      string  `json:"visibility"`
 	Greeting        string  `json:"greeting"`
-	Description     string  `json:"description"`
-	Definition      string  `json:"definition"`
-	Upvotes         string  `json:"upvotes"`
-	AuthorUsername  string  `json:"user__username"`
-	NumInteractions string  `json:"participant__num_interactions"`
 	AvatarFileName  string  `json:"avatar_file_name"`
 	Avatar          *Avatar `json:"-"`
+	Copyable        bool    `json:"copyable"`
+	ParticipantName string  `json:"participant__name"`
+	AuthorUsername  string  `json:"user__username"`
+	NumInteractions int64   `json:"participant__num_interactions"`
+	ImgGenEnabled   bool    `json:"img_gen_enabled"`
+	Priority        float32 `json:"priority"`
+	DefaultVoiceID  *string `json:"default_voice_id"`
+	Upvotes         int64   `json:"upvotes"`
+	Name            string  `json:"-"`
 }
 
 // UnmarshalJSON custom unmarshalling for CharacterShort.
@@ -259,7 +260,6 @@ func (cs *CharacterShort) UnmarshalJSON(data []byte) error {
 	type Alias CharacterShort
 	aux := &struct {
 		*Alias
-		Name string `json:"name"`
 	}{
 		Alias: (*Alias)(cs),
 	}
@@ -268,14 +268,10 @@ func (cs *CharacterShort) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	// Choose Name from ParticipantName or Name
-	cs.Name = cs.ParticipantName
+	// Set Name to ParticipantName
 	if cs.Name == "" {
-		cs.Name = aux.Name
+		cs.Name = cs.ParticipantName
 	}
-
-	// Lowercase the visibility
-	cs.Visibility = cs.Visibility
 
 	// Create Avatar instance if AvatarFileName is provided
 	if cs.AvatarFileName != "" {
@@ -287,17 +283,17 @@ func (cs *CharacterShort) UnmarshalJSON(data []byte) error {
 
 // Character represents a CharacterAI character.
 type Character struct {
-	CharacterID     string                 `json:"external_id"`
+	ExternalID      string                 `json:"external_id"`
 	Title           string                 `json:"title"`
-	Name            string                 `json:"-"`
+	Name            string                 `json:"name"`
 	ParticipantName string                 `json:"participant__name"`
 	Visibility      string                 `json:"visibility"`
 	Greeting        string                 `json:"greeting"`
 	Description     string                 `json:"description"`
 	Definition      string                 `json:"definition"`
-	Upvotes         string                 `json:"upvotes"`
+	Upvotes         int64                  `json:"upvotes"`
 	AuthorUsername  string                 `json:"user__username"`
-	NumInteractions string                 `json:"participant__num_interactions"`
+	NumInteractions int64                  `json:"participant__num_interactions"`
 	AvatarFileName  string                 `json:"avatar_file_name"`
 	Avatar          *Avatar                `json:"-"`
 	Copyable        bool                   `json:"copyable"`
@@ -307,8 +303,8 @@ type Character struct {
 	ImgPromptRegex  string                 `json:"img_prompt_regex"`
 	StripImgPrompt  bool                   `json:"strip_img_prompt_from_msg"`
 	StarterPrompts  map[string]interface{} `json:"starter_prompts"`
-	CommentsEnabled bool                   `json:"comments_enabled"`
-	InternalID      string                 `json:"participant__user__username"`
+	CommentsEnabled *bool                  `json:"comments_enabled"`
+	CreatorName     string                 `json:"participant__user__username"`
 	VoiceID         string                 `json:"voice_id"`
 	DefaultVoiceID  string                 `json:"default_voice_id"`
 	Songs           []string               `json:"songs"`
@@ -319,7 +315,6 @@ func (c *Character) UnmarshalJSON(data []byte) error {
 	type Alias Character
 	aux := &struct {
 		*Alias
-		Name string `json:"name"`
 	}{
 		Alias: (*Alias)(c),
 	}
@@ -329,17 +324,55 @@ func (c *Character) UnmarshalJSON(data []byte) error {
 	}
 
 	// Choose Name from ParticipantName or Name
-	c.Name = c.ParticipantName
 	if c.Name == "" {
-		c.Name = aux.Name
+		c.Name = c.ParticipantName
 	}
-
-	// Lowercase the visibility
-	c.Visibility = c.Visibility
 
 	// Create Avatar instance if AvatarFileName is provided
 	if c.AvatarFileName != "" {
 		c.Avatar = &Avatar{FileName: c.AvatarFileName}
+	}
+
+	return nil
+}
+
+type CharacterSearchResult struct {
+	DocumentID              string  `json:"document_id"`
+	ExternalID              string  `json:"external_id"`
+	Title                   string  `json:"title"`
+	Greeting                string  `json:"greeting"`
+	AvatarFileName          string  `json:"avatar_file_name"`
+	Avatar                  *Avatar `json:"-"`
+	Visibility              string  `json:"visibility"`
+	ParticipantName         string  `json:"participant__name"`
+	ParticipantInteractions float64 `json:"participant__num_interactions"`
+	AuthorUsername          string  `json:"user__username"`
+	Priority                float64 `json:"priority"`
+	SearchScore             float64 `json:"search_score"`
+	Name                    string  `json:"-"`
+}
+
+func (csr *CharacterSearchResult) UnmarshalJSON(data []byte) error {
+	type Alias CharacterSearchResult
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(csr),
+	}
+
+	// Unmarshal into the auxiliary struct
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Set Name to ParticipantName if Name is empty
+	if csr.Name == "" {
+		csr.Name = csr.ParticipantName
+	}
+
+	// Create Avatar instance if AvatarFileName is provided
+	if csr.AvatarFileName != "" {
+		csr.Avatar = &Avatar{FileName: csr.AvatarFileName}
 	}
 
 	return nil

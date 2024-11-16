@@ -27,6 +27,9 @@ func NewClient(token string, webNextAuth string, proxy string) *Client {
 
 // Authenticate retrieves the account ID
 func (c *Client) Authenticate() error {
+	if c.Token == "" {
+		return fmt.Errorf("token not provided")
+	}
 	account, err := c.FetchMe()
 	if err != nil {
 		return err

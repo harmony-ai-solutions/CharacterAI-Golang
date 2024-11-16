@@ -177,7 +177,7 @@ func (c *Client) FetchSimilarCharacters(characterID string) ([]*CharacterShort, 
 }
 
 // SearchCharacters searches for characters by name.
-func (c *Client) SearchCharacters(query string) ([]*CharacterShort, error) {
+func (c *Client) SearchCharacters(query string) ([]*CharacterSearchResult, error) {
 	urlStr := fmt.Sprintf("https://plus.character.ai/chat/characters/search/?query=%s", url.QueryEscape(query))
 	headers := c.GetHeaders(false)
 
@@ -197,7 +197,7 @@ func (c *Client) SearchCharacters(query string) ([]*CharacterShort, error) {
 	}
 
 	var result struct {
-		Characters []*CharacterShort `json:"characters"`
+		Characters []*CharacterSearchResult `json:"characters"`
 	}
 	err = json.Unmarshal(body, &result)
 	if err != nil {
