@@ -5,9 +5,14 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/suite"
 	"os"
-	"testing"
 	"time"
 )
+
+type BaseSuite struct {
+	suite.Suite
+	client *cai.Client
+	config *TestConfig
+}
 
 type TestConfig struct {
 	Token       string
@@ -26,47 +31,26 @@ func LoadTestConfig() *TestConfig {
 	}
 }
 
-type ClientIntegrationSuite struct {
-	suite.Suite
-	client *cai.Client
-	config *TestConfig
-}
-
-func TestClientIntegrationSuite(t *testing.T) {
-	suite.Run(t, new(ClientIntegrationSuite))
-}
-
-func (s *ClientIntegrationSuite) SetupSuite() {
+func (s *BaseSuite) SetupSuite() {
 	s.config = LoadTestConfig()
-
-	if s.config.Token == "" || s.config.WebNextAuth == "" {
-		s.T().Skip("API credentials are not provided. Skipping integration tests.")
-	}
-
 	s.client = cai.NewClient(s.config.Token, s.config.WebNextAuth, s.config.Proxy)
-
-	// Authenticate the client
 	err := s.client.Authenticate()
-	s.Require().NoError(err, "Authentication failed")
-	log.Debugf("Authenticated UserAccount for user ID '%v'", s.client.UserAccountID)
-
-	// Pause to avoid rate limiting
-	time.Sleep(1 * time.Second)
+	s.Require().NoError(err)
 }
 
-func (s *ClientIntegrationSuite) TearDownSuite() {
+func (s *BaseSuite) TearDownSuite() {
 	if s.client != nil {
 		err := s.client.Close()
 		s.Require().NoError(err, "Failed to close client")
 	}
 }
 
-func (s *ClientIntegrationSuite) SetupTest() {
+func (s *BaseSuite) SetupTest() {
 	// Set Log level for all tests
 	log.SetLevel(log.DebugLevel)
 }
 
-func (s *ClientIntegrationSuite) TearDownTest() {
+func (s *BaseSuite) TearDownTest() {
 	// Pause to avoid rate limiting
 	time.Sleep(1 * time.Second)
 }

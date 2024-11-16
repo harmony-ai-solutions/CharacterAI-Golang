@@ -1,8 +1,17 @@
 package cai
 
-import "time"
+import (
+	"testing"
+	"time"
 
-func (s *ClientIntegrationSuite) TestFetchCharacterInfo() {
+	"github.com/stretchr/testify/suite"
+)
+
+type CharacterSuite struct {
+	BaseSuite
+}
+
+func (s *CharacterSuite) TestFetchCharacterInfo() {
 	if s.config.CharacterID == "" {
 		s.T().Skip("No test character ID provided. Skipping TestFetchCharacterInfo.")
 	}
@@ -14,4 +23,8 @@ func (s *ClientIntegrationSuite) TestFetchCharacterInfo() {
 
 	// Pause to avoid rate limiting
 	time.Sleep(1 * time.Second)
+}
+
+func TestCharacterSuite(t *testing.T) {
+	suite.Run(t, new(CharacterSuite))
 }

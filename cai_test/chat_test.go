@@ -1,8 +1,16 @@
 package cai
 
-import "time"
+import (
+	"github.com/stretchr/testify/suite"
+	"testing"
+	"time"
+)
 
-func (s *ClientIntegrationSuite) TestCreateChatAndSendMessage() {
+type ChatSuite struct {
+	BaseSuite
+}
+
+func (s *ChatSuite) TestCreateChatAndSendMessage() {
 	// Create a new chat with a default character ID
 	// Ensure the character ID is set
 	if s.config.CharacterID == "" {
@@ -30,4 +38,8 @@ func (s *ClientIntegrationSuite) TestCreateChatAndSendMessage() {
 
 	// Pause to avoid rate limiting
 	time.Sleep(1 * time.Second)
+}
+
+func TestChatSuite(t *testing.T) {
+	suite.Run(t, new(ChatSuite))
 }
