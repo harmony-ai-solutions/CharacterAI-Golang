@@ -1,38 +1,52 @@
 # 💬 CharacterAI - Golang Port by Project Harmony.AI
+
 ![Tag](https://img.shields.io/github/license/harmony-ai-solutions/CharacterAI-Golang)
 
-An unofficial API Client for CharacterAI, written in Golang, ported over from Python.
+An unofficial API Client for [CharacterAI](https://character.ai/), written in Golang, ported over from Python.
 
-Original Python source code in this repo: https://github.com/kramcat/CharacterAI
-
-Original Readme kept for reference: [Original Readme](README.old.md)
+Original Python source code by [Xtr4F](https://github.com/Xtr4F) and supporters in this repo: https://github.com/Xtr4F/PyCharacterAI
 
 ---
 
-## ⚠️ ATTENTION: Pre-Release!
-This repo is currently very barebone and not optimized for productive usage in golang applications yet.
-Any support with testing, verifying functionality and adding proper golang struct handling is heavily appreciated.
+⚠️ ATTENTION - Unofficial community repository! ⚠️
 
-You have questions, need help, or just want to show your support? Reach us here: [Discord Server & Patreon page](#how-to-reach-out-to-us).
+This is an unofficial library which has no relation to the CharacterAI development team. 
+ 
+CharacterAI has no official api and all breakpoints were found manually using reverse engineering.
+The authors are not responsible for possible consequences of using this library.
+
+Documentation may be incomplete or missing. This repo is not optimized for productive usage in golang applications yet.
+Use at your own risk.
+
+You have questions, need help, or just want to show your support? Reach us
+here: [Discord Server & Patreon page](#how-to-reach-out-to-us).
 
 ### TODO's:
+
 - [x] Port over API from source repo
-  - [x] Confirm basic functionality 
-  - [ ] Write tests for all API Methods
-- [ ] Golang QOL improvements
-  - [ ] Create Wrapper Structs for API Endpoints + Parse them within the API methods
-  - [ ] Add proper WebSocket client for V2 / Websocket API 
+  - [x] Confirm basic functionality
+- [x] Golang QOL improvements
+  - [x] Create Wrapper Structs for API Endpoints + Parse them within the API methods
+  - [x] Add proper WebSocket client for V2 / Websocket API
+- [ ] Documentation & Testing
+  - [x] Tests for main chat functions
+  - [ ] Write tests for all API Methods => Not all methods have tests yet, but most.
+  - [ ] Documentation for Endpoints & Data Types
 
 ## 💻 Installation
+
 ```bash
 go get github.com/harmony-ai-solutions/CharacterAI-Golang
 ```
 
 ## 📚 Documentation
-Detailed documentation and Apidocs coming soon
+
+Detailed documentation and API-Docs TBD
 
 ## 📙 Example
+
 Example code for a simple, functional Chat app. The code can also be found in [example.go](example.go)
+
 ```Golang
 package main
 
@@ -41,95 +55,115 @@ import (
 	"fmt"
 	"github.com/harmony-ai-solutions/CharacterAI-Golang/cai"
 	"os"
-	"strconv"
 	"strings"
 )
 
 func main() {
-	// Initial params - Usage of env vars recommended
-	//token := ""
-	//character := ""
-	//isPlus := false
+	// Retrieve the token and character ID from environment variables
 	token := os.Getenv("CAI_TOKEN")
-	character := os.Getenv("CAI_CHAR")
-	isPlus, errParse := strconv.ParseBool(os.Getenv("CAI_PLUS"))
-	if errParse != nil {
-		isPlus = false
-	}
+	webNextAuth := os.Getenv("CAI_WEBNEXTAUTH")
+	proxyURL := os.Getenv("CAI_PROXY")
+	characterID := os.Getenv("CAI_CHAR")
 
-	// Create client
-	caiClient, errClient := cai.NewGoCAI(token, isPlus)
-	if errClient != nil {
-		fmt.Println(fmt.Errorf("unable to create client, error: %q", errClient))
+	if token == "" || characterID == "" {
+		fmt.Println("Error: CAI_TOKEN or CAI_CHAR environment variable is not set.")
 		os.Exit(1)
 	}
-	// Get chat data
-	chatData, errChat := caiClient.Chat.GetChat(character)
-	if errChat != nil {
-		if strings.Contains(errChat.Error(), "404") {
-			// Chat does not exist yet, create new
-			chatData, errChat = caiClient.Chat.NewChat(character)
-			if errChat != nil {
-				fmt.Println(fmt.Errorf("unable to create chat, error: %q", errChat))
-				os.Exit(3)
-			}
-		} else {
-			fmt.Println(fmt.Errorf("unable to fetch chat data, error: %q", errChat))
-			os.Exit(2)
-		}
-	}
-	// Find AI paricipant in chat
-	var aiParticipant *cai.ChatParticipant
-	for _, participant := range chatData.Participants {
-		if !participant.IsHuman {
-			aiParticipant = participant
-			break
-		}
+
+	// Create a new client instance
+	client := cai.NewClient(token, webNextAuth, proxyURL)
+	err := client.Authenticate()
+	if err != nil {
+		fmt.Printf("Authentication failed: %v\n", err)
+		os.Exit(2)
 	}
 
-	// Get History for chatroom
-	if chatHistoryData, errHistory := caiClient.Chat.GetHistory(chatData.ExternalID); errHistory != nil {
-		fmt.Println(fmt.Errorf("unable to parse user data"))
-		os.Exit(4)
+	// Fetch existing chats with the character
+	chats, err := client.FetchChats(characterID, 0)
+	if err != nil {
+		fmt.Printf("Error fetching chats: %v\n", err)
+		os.Exit(3)
+	}
+
+	var chat *cai.Chat
+
+	if len(chats) > 0 {
+		// Use the most recent chat with the character
+		chat = chats[0]
+		fmt.Printf("Using existing chat with ID: %s\n", chat.ChatID)
 	} else {
-		fmt.Println("Previous messages (up to 5):")
-		messageHistory := chatHistoryData.Messages
-		if len(chatHistoryData.Messages) > 5 {
-			messageHistory = messageHistory[len(messageHistory)-5:]
+		// Create a new chat with the character
+		chat, _, err = client.CreateChat(characterID, true)
+		if err != nil {
+			fmt.Printf("Error creating chat: %v\n", err)
+			os.Exit(4)
 		}
-		for _, message := range messageHistory {
-			fmt.Println(fmt.Sprintf("%v: %v", message.SourceName, message.Text))
-		}
+		fmt.Printf("Created new chat with ID: %s\n", chat.ChatID)
 	}
 
-	for true {
-		fmt.Println("Enter user message: ")
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		errInput := scanner.Err()
-		if errInput != nil {
-			fmt.Println(fmt.Errorf("unable to scan user input. Error: %v", errInput))
-			os.Exit(6)
-		}
-		// Send
-		messageResult, errMessage := caiClient.Chat.SendMessage(chatData.ExternalID, aiParticipant.User.Username, scanner.Text(), nil)
-		if errMessage != nil {
-			fmt.Println(fmt.Errorf("unable to send message. Error: %v", errMessage))
-			os.Exit(7)
-		}
-		// Handle result
-		if len(messageResult.Replies) > 0 {
-			firstReply := messageResult.Replies[0]
-			fmt.Println(fmt.Sprintf("%v: %v", aiParticipant.Name, firstReply.Text))
-			fmt.Println()
-		}
+	// Print the previous messages in the chat (up to 5)
+	messages, _, err := client.FetchMessages(chat.ChatID, false, "")
+	if err != nil {
+		fmt.Printf("Error fetching messages: %v\n", err)
+		os.Exit(1)
 	}
+
+	fmt.Println("Previous messages (up to 5):")
+	if len(messages) > 5 {
+		messages = messages[len(messages)-5:]
+	}
+	for _, turn := range messages {
+		var authorName string
+		if turn.Author.IsHuman {
+			authorName = "You"
+		} else {
+			authorName = turn.Author.Name
+		}
+		candidate := turn.Candidates[turn.PrimaryCandidateID]
+		fmt.Printf("%s: %s\n", authorName, candidate.Text)
+	}
+	fmt.Println()
+
+	// Start the interaction loop
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("You: ")
+		userInput, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Error reading user input: %v\n", err)
+			os.Exit(1)
+		}
+		userInput = strings.TrimSpace(userInput)
+
+		// Send the user's message to the character
+		turn, err := client.SendMessage(characterID, chat.ChatID, userInput)
+		if err != nil {
+			fmt.Printf("Error sending message: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Retrieve the AI's response
+		aiResponse := ""
+		if turn != nil && len(turn.Candidates) > 0 {
+			primaryCandidate := turn.Candidates[turn.PrimaryCandidateID]
+			aiResponse = primaryCandidate.Text
+		} else {
+			fmt.Println("No response received from the AI.")
+			continue
+		}
+
+		fmt.Printf("%s: %s\n", turn.Author.Name, aiResponse)
+		fmt.Println()
+	}
+}
 ```
 
 ---
 
 ## About Project Harmony.AI
+
 ![Project Harmony.AI](docs/images/Harmony-Main-Banner-200px.png)
+
 ### Our goal: Elevating Human <-to-> AI Interaction beyond known boundaries.
 Project Harmony.AI emerged from the idea to allow for a seamless living together between AI-driven characters and humans.
 Since it became obvious that a lot of technologies required for achieving this goal are not existing or still very experimental,
@@ -137,6 +171,7 @@ the long term vision of Project Harmony is to establish the full set of technolo
 technological barriers in Human <-to-> AI Interaction.
 
 ### Our principles: Fair use and accessibility
+
 We want to counter today's tendencies of AI development centralization at the hands of big
 corporations. We're pushing towards maximum transparency in our own development efforts, and aim for our software to be
 accessible and usable in the most democratic ways possible.

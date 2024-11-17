@@ -1,92 +1,446 @@
-// Package cai
-/*
-Copyright © 2023 Harmony AI Solutions & Contributors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cai
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
-	http "github.com/bogdanfinn/fhttp"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
 )
 
-type Character struct {
-	Token   string
-	Session *Session
-}
+// FetchCharacterInfo retrieves information about a character.
+func (c *Client) FetchCharacterInfo(characterID string) (*Character, error) {
+	urlStr := "https://plus.character.ai/chat/character/info/"
+	headers := c.GetHeaders(false)
 
-func (c *Character) Create(greeting, identifier, name, avatarRelPath, baseImgPrompt, definition, description, title, visibility, token string, categories []string, copyable, imgGenEnabled bool, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"greeting":        greeting,
-		"identifier":      identifier,
-		"name":            name,
-		"avatar_rel_path": avatarRelPath,
-		"base_img_prompt": baseImgPrompt,
-		"categories":      categories,
-		"copyable":        copyable,
-		"definition":      definition,
-		"description":     description,
-		"img_gen_enabled": imgGenEnabled,
-		"title":           title,
-		"visibility":      visibility,
+	payload := CharacterInfoPayload{
+		ExternalID: characterID,
 	}
-	for key, val := range extraArgs {
-		data[key] = val
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
 	}
-	return request("../chat/character/create/", c.Session, token, http.MethodPost, data, false, false)
-}
 
-func (c *Character) Update(externalID, greeting, identifier, name, title, definition, description, visibility, token string, categories []string, copyable bool, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"external_id": externalID,
-		"name":        name,
-		"categories":  categories,
-		"title":       title,
-		"visibility":  visibility,
-		"copyable":    copyable,
-		"description": description,
-		"greeting":    greeting,
-		"definition":  definition,
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return nil, err
 	}
-	for key, val := range extraArgs {
-		data[key] = val
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch character info, status code: %d", resp.StatusCode)
 	}
-	return request("../chat/character/update/", c.Session, token, http.MethodPost, data, false, false)
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result CharacterInfoResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Status != "OK" {
+		return nil, fmt.Errorf("error fetching character info: %s", result.Error)
+	}
+
+	return result.Character, nil
 }
 
-func (c *Character) Trending() (map[string]interface{}, error) {
-	return request("chat/characters/trending/", c.Session, "", http.MethodGet, nil, false, false)
+// FetchCharactersByCategory retrieves characters categorized by curated categories.
+func (c *Client) FetchCharactersByCategory() (map[string][]*CharacterShort, error) {
+	urlStr := "https://plus.character.ai/chat/curated_categories/characters/"
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch characters by category, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		CharactersByCategory map[string][]*CharacterShort `json:"characters_by_curated_category"`
+	}
+
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.CharactersByCategory, nil
 }
 
-func (c *Character) Recommended(token string) (map[string]interface{}, error) {
-	return request("chat/characters/recommended/", c.Session, token, http.MethodGet, nil, false, false)
+// FetchRecommendedCharacters retrieves recommended characters for the user.
+func (c *Client) FetchRecommendedCharacters() ([]*CharacterShort, error) {
+	urlStr := "https://neo.character.ai/recommendation/v1/user"
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch recommended characters, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Characters []*CharacterShort `json:"characters"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Characters, nil
 }
 
-func (c *Character) Categories() (map[string]interface{}, error) {
-	return request("chat/character/categories/", c.Session, "", http.MethodGet, nil, false, false)
+// FetchFeaturedCharacters retrieves featured characters.
+func (c *Client) FetchFeaturedCharacters() ([]*CharacterShort, error) {
+	urlStr := "https://plus.character.ai/chat/characters/featured_v2/"
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch featured characters, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Characters []*CharacterShort `json:"characters"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Characters, nil
 }
 
-func (c *Character) Info(char, token string) (map[string]interface{}, error) {
-	data := map[string]interface{}{"external_id": char}
-	return request("chat/character/", c.Session, token, http.MethodPost, data, false, false)
+// FetchSimilarCharacters retrieves characters similar to the given character.
+func (c *Client) FetchSimilarCharacters(characterID string) ([]*CharacterShort, error) {
+	urlStr := fmt.Sprintf("https://neo.character.ai/recommendation/v1/character/%s", characterID)
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch similar characters, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Characters []*CharacterShort `json:"characters"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Characters, nil
 }
 
-func (c *Character) Search(query, token string) (map[string]interface{}, error) {
-	url := fmt.Sprintf("chat/characters/search/?query=%s/", query)
-	return request(url, c.Session, token, http.MethodGet, nil, false, false)
+// SearchCharacters searches for characters by name.
+func (c *Client) SearchCharacters(query string) ([]*CharacterSearchResult, error) {
+	urlStr := fmt.Sprintf("https://plus.character.ai/chat/characters/search/?query=%s", url.QueryEscape(query))
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to search characters, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result struct {
+		Characters []*CharacterSearchResult `json:"characters"`
+	}
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result.Characters, nil
 }
 
-func (c *Character) Voices() (map[string]interface{}, error) {
-	return request("chat/character/voices/", c.Session, "", http.MethodGet, nil, false, false)
+// SearchCreators searches for creators by name.
+func (c *Client) SearchCreators(query string) ([]Creator, error) {
+	urlStr := fmt.Sprintf("https://plus.character.ai/chat/creators/search/?query=%s", url.QueryEscape(query))
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to search creators, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result SearchCreatorsResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Status != "OK" {
+		return nil, fmt.Errorf("error searching creators: %s", result.Error)
+	}
+
+	return result.Creators, nil
+}
+
+// CharacterVote casts a vote for a character. Use 'nil' for removing a vote.
+func (c *Client) CharacterVote(characterID string, vote *bool) error {
+	urlStr := "https://plus.character.ai/chat/character/vote/"
+	headers := c.GetHeaders(false)
+
+	payload := CharacterVotePayload{
+		ExternalID: characterID,
+		Vote:       vote,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to vote on character, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	var result CharacterVoteResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return err
+	}
+
+	if result.Status != "OK" {
+		return fmt.Errorf("error voting on character: %s", result.Error)
+	}
+
+	return nil
+}
+
+// CreateCharacter creates a new character.
+func (c *Client) CreateCharacter(name, greeting string, title, description, definition string, copyable bool, visibility, avatarRelPath, defaultVoiceID string) (*Character, error) {
+	// Validate inputs
+	if len(name) < 3 || len(name) > 20 {
+		return nil, errors.New("name must be at least 3 characters and no more than 20")
+	}
+	if len(greeting) < 3 || len(greeting) > 2048 {
+		return nil, errors.New("greeting must be at least 3 characters and no more than 2048")
+	}
+	visibility = strings.ToUpper(visibility)
+	if visibility != "UNLISTED" && visibility != "PUBLIC" && visibility != "PRIVATE" {
+		return nil, errors.New(`visibility must be "unlisted", "public", or "private"`)
+	}
+	if title != "" && (len(title) < 3 || len(title) > 50) {
+		return nil, errors.New("title must be at least 3 characters and no more than 50")
+	}
+	if len(description) > 500 {
+		return nil, errors.New("description must be no more than 500 characters")
+	}
+	if len(definition) > 32000 {
+		return nil, errors.New("definition must be no more than 32000 characters")
+	}
+
+	urlStr := "https://plus.character.ai/chat/character/create/"
+	headers := c.GetHeaders(false)
+
+	payload := CreateCharacterPayload{
+		AvatarRelPath:         avatarRelPath,
+		BaseImgPrompt:         "",
+		Categories:            []string{},
+		Copyable:              copyable,
+		DefaultVoiceID:        defaultVoiceID,
+		Definition:            definition,
+		Description:           description,
+		Greeting:              greeting,
+		Identifier:            fmt.Sprintf("id:%s", generateUUID()),
+		ImgGenEnabled:         false,
+		Name:                  name,
+		StripImgPromptFromMsg: false,
+		Title:                 title,
+		Visibility:            visibility,
+		VoiceID:               "",
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to create character, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result CreateCharacterResult
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Status != "OK" {
+		return nil, fmt.Errorf("failed to create character, error: %s", result.Error)
+	}
+
+	if result.Character == nil {
+		return nil, errors.New("character not returned in response")
+	}
+
+	return result.Character, nil
+}
+
+// EditCharacter edits an existing character.
+func (c *Client) EditCharacter(characterID, name, greeting string, title, description, definition string, copyable bool, visibility, avatarRelPath, defaultVoiceID string) (*Character, error) {
+	// Validate inputs
+	if len(name) < 3 || len(name) > 20 {
+		return nil, errors.New("name must be at least 3 characters and no more than 20")
+	}
+	if len(greeting) < 3 || len(greeting) > 2048 {
+		return nil, errors.New("greeting must be at least 3 characters and no more than 2048")
+	}
+	visibility = strings.ToUpper(visibility)
+	if visibility != "UNLISTED" && visibility != "PUBLIC" && visibility != "PRIVATE" {
+		return nil, errors.New(`visibility must be "unlisted", "public", or "private"`)
+	}
+	if title != "" && (len(title) < 3 || len(title) > 50) {
+		return nil, errors.New("title must be at least 3 characters and no more than 50")
+	}
+	if len(description) > 500 {
+		return nil, errors.New("description must be no more than 500 characters")
+	}
+	if len(definition) > 32000 {
+		return nil, errors.New("definition must be no more than 32000 characters")
+	}
+
+	urlStr := "https://plus.character.ai/chat/character/update/"
+	headers := c.GetHeaders(false)
+
+	payload := EditCharacterPayload{
+		Archived:              false,
+		AvatarRelPath:         avatarRelPath,
+		BaseImgPrompt:         "",
+		Categories:            []string{},
+		Copyable:              copyable,
+		DefaultVoiceID:        defaultVoiceID,
+		Definition:            definition,
+		Description:           description,
+		ExternalID:            characterID,
+		Greeting:              greeting,
+		ImgGenEnabled:         false,
+		Name:                  name,
+		StripImgPromptFromMsg: false,
+		Title:                 title,
+		Visibility:            visibility,
+		VoiceID:               "",
+	}
+
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to edit character, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result EditCharacterResult
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	if result.Status != "OK" {
+		return nil, fmt.Errorf("failed to edit character, error: %s", result.Error)
+	}
+
+	if result.Character == nil {
+		return nil, errors.New("character not returned in response")
+	}
+
+	return result.Character, nil
 }

@@ -1,248 +1,876 @@
-// Package cai
-/*
-Copyright © 2023 Harmony AI Solutions & Contributors
-
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
 package cai
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	http "github.com/bogdanfinn/fhttp"
-	"strings"
+	"io"
+	"net/http"
+	"net/url"
+	"time"
 )
 
-type Chat struct {
-	Token   string
-	Session *Session
-}
+func (c *Client) SendMessage(characterID, chatID, text string) (*Turn, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
 
-type ChatData struct {
-	Title           string             `json:"title"`
-	Participants    []*ChatParticipant `json:"participants"`
-	ExternalID      string             `json:"external_id"`
-	Created         string             `json:"created"`
-	LastInteraction string             `json:"last_interaction"`
-	Type            string             `json:"type"`
-	Description     string             `json:"description"`
-}
-
-type ChatUser struct {
-	Username  string       `json:"username"`
-	ID        uint64       `json:"id"`
-	FirstName string       `json:"first_name"`
-	IsStaff   bool         `json:"is_staff"`
-	Account   *ChatAccount `json:"account"`
-}
-
-type ChatAccount struct {
-	Name                     string `json:"name"`
-	AvatarType               string `json:"avatar_type"`
-	OnboardingComplete       bool   `json:"onboarding_complete"`
-	AvatarFileName           string `json:"avatar_file_name"`
-	MobileOnboardingComplete *bool  `json:"mobile_onboarding_complete"`
-}
-
-type ChatParticipant struct {
-	User            *ChatUser `json:"user"`
-	Name            string    `json:"name"`
-	IsHuman         bool      `json:"is_human"`
-	NumInteractions int       `json:"num_interactions"`
-}
-
-type ChatChar struct {
-	Participant    *ChatParticipant `json:"participant"`
-	AvatarFileName *string          `json:"avatar_file_name"`
-}
-
-type ChatHistory struct {
-	Messages []*ChatHistoryMessage `json:"messages"`
-	HasMore  bool                  `json:"has_more"`
-	NextPage int                   `json:"next_page"`
-}
-
-type ChatHistoryMessage struct {
-	Target                        string    `json:"tgt"`
-	ImageRelPath                  string    `json:"image_rel_path"`
-	ImagePromptText               string    `json:"image_prompt_text"`
-	Deleted                       *bool     `json:"deleted"` // TODO: confirm bool
-	IsAlternative                 bool      `json:"is_alternative"`
-	SourceName                    string    `json:"src__name"`
-	SourceUserUsername            string    `json:"src__user__username"`
-	ResponsibleUserUsername       *string   `json:"responsible_user__username"`
-	ID                            uint64    `json:"id"`
-	UUID                          string    `json:"uuid"`
-	Source                        string    `json:"src"`
-	SourceIsHuman                 bool      `json:"src__is_human"`
-	SourceCharacterAvatarFileName *string   `json:"src__character__avatar_file_name"`
-	SourceChar                    *ChatChar `json:"src_char"`
-	Text                          string    `json:"text"`
-}
-
-type ChatMessage struct {
-	Replies         []*ChatMessageReply `json:"replies"`
-	SourceChar      *ChatChar           `json:"src_char"`
-	IsFinalChunk    bool                `json:"is_final_chunk"`
-	LastUserMsgId   uint64              `json:"last_user_msg_id"`
-	LastUserMsgUUID string              `json:"last_user_msg_uuid"`
-}
-
-type ChatMessageReply struct {
-	Text string `json:"text"`
-	UUID string `json:"uuid"`
-	ID   uint64 `json:"id"`
-}
-
-func (c *Chat) CreateRoom(characters []string, name, topic string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"characters": characters,
-		"name":       name,
-		"topic":      topic,
-		"visibility": "PRIVATE",
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return nil, err
 	}
-	for key, val := range extraArgs {
-		data[key] = val
-	}
-	return request("chat/room/create/", c.Session, c.Token, http.MethodPost, data, false, false)
-}
 
-func (c *Chat) Rate(rate int, historyID, messageID string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	var label []int
-	switch rate {
-	case 0:
-		label = []int{234, 238, 241, 244}
-	case 1:
-		label = []int{235, 237, 241, 244}
-	case 2:
-		label = []int{235, 238, 240, 244}
-	case 3:
-		label = []int{235, 238, 241, 243}
-	default:
-		return nil, errors.New("Wrong Rate Value")
-	}
-	data := map[string]interface{}{
-		"label_ids":           label,
-		"history_external_id": historyID,
-		"message_uuid":        messageID,
-	}
-	for key, val := range extraArgs {
-		data[key] = val
-	}
-	return request("chat/annotations/label/", c.Session, c.Token, "PUT", data, false, false)
-}
+	candidateID := generateUUID()
+	turnID := generateUUID()
+	requestID := generateUUID()
 
-func (c *Chat) NextMessage(historyID, parentMsgUUID, tgt string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"history_external_id": historyID,
-		"parent_msg_uuid":     parentMsgUUID,
-		"tgt":                 tgt,
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "create_and_generate_turn",
+		OriginID:  "web-next",
+		RequestID: requestID,
+		Payload: CreateAndGenerateTurnPayload{
+			CharacterID:         characterID,
+			NumCandidates:       1,
+			PreviousAnnotations: generatePreviousAnnotations(),
+			SelectedLanguage:    "",
+			TTSEnabled:          false,
+			UserName:            "",
+			Turn: TurnPayload{
+				Author: AuthorPayload{
+					AuthorID: c.UserAccountID,
+					IsHuman:  true,
+					Name:     "",
+				},
+				Candidates: []CandidatePayload{
+					{
+						CandidateID: candidateID,
+						RawContent:  text,
+					},
+				},
+				PrimaryCandidateID: candidateID,
+				TurnKey: TurnKey{
+					ChatID: chatID,
+					TurnID: turnID,
+				},
+			},
+		},
 	}
-	for key, val := range extraArgs {
-		data[key] = val
-	}
-	return request("chat/streaming/", c.Session, c.Token, http.MethodPost, data, false, false)
-}
 
-func (c *Chat) GetHistories(char string, number int) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"external_id": char,
-		"number":      number,
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return nil, err
 	}
-	return request("chat/character/histories_v2/", c.Session, c.Token, http.MethodPost, data, false, false)
-}
 
-func (c *Chat) GetHistory(historyID string) (*ChatHistory, error) {
-	url := fmt.Sprintf("chat/history/msgs/user/?history_external_id=%s", historyID)
-	historyResult, errHistory := baseRequest(url, c.Session, c.Token, http.MethodGet, nil, false)
-	if errHistory != nil {
-		return nil, errHistory
-	}
-	history := &ChatHistory{}
-	if errUnmarshall := json.Unmarshal(historyResult, history); errUnmarshall != nil {
-		return nil, errUnmarshall
-	}
-	return history, nil
-}
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return nil, err
+		}
 
-func (c *Chat) GetChat(char string) (*ChatData, error) {
-	data := map[string]interface{}{
-		"character_external_id": char,
-	}
-	chatResult, errChat := baseRequest("chat/history/continue/", c.Session, c.Token, http.MethodPost, data, false)
-	if errChat != nil {
-		return nil, errChat
-	}
-	chatData := &ChatData{}
-	if errUnmarshall := json.Unmarshal(chatResult, chatData); errUnmarshall != nil {
-		return nil, errUnmarshall
-	}
-	return chatData, nil
-}
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return nil, err
+		}
 
-func (c *Chat) SendMessage(historyID, tgt, text string, extraArgs map[string]interface{}) (*ChatMessage, error) {
-	data := map[string]interface{}{
-		"history_external_id": historyID,
-		"tgt":                 tgt,
-		"text":                text,
-	}
-	if extraArgs != nil {
-		for key, val := range extraArgs {
-			data[key] = val
+		switch response.Command {
+		case "neo_error":
+			return nil, errors.New(response.Comment)
+		case "add_turn", "update_turn":
+			var result TurnResponsePayload
+			err = json.Unmarshal(responseBytes, &result)
+			if err != nil {
+				return nil, err
+			}
+			if result.Turn.Author.IsHuman {
+				// Skip initial response by the user
+				continue
+			}
+			// TODO: This only works for 1on1 conversations currently
+			var isFinal = false
+			for _, candidate := range result.Turn.Candidates {
+				if candidate.IsFinal {
+					isFinal = true
+				}
+			}
+			if isFinal {
+				return &result.Turn, nil
+			}
 		}
 	}
-	chatMessageResult, errChat := baseRequest("chat/streaming/", c.Session, c.Token, http.MethodPost, data, false)
-	if errChat != nil {
-		return nil, errChat
-	}
-	chatMessageString := string(chatMessageResult)
-	chatMessageString = strings.ReplaceAll(chatMessageString, "\r\n", "\n")
-	splitted := strings.Split(chatMessageString, "\n")
-	if len(splitted) > 1 {
-		chatMessageString = splitted[len(splitted)-2]
-	}
-	chatMessage := &ChatMessage{}
-	if errUnmarshall := json.Unmarshal([]byte(chatMessageString), chatMessage); errUnmarshall != nil {
-		return nil, errUnmarshall
-	}
-	return chatMessage, nil
 }
 
-func (c *Chat) DeleteMessage(historyID string, uuidsToDelete []string, extraArgs map[string]interface{}) (map[string]interface{}, error) {
-	data := map[string]interface{}{
-		"history_id":      historyID,
-		"uuids_to_delete": uuidsToDelete,
+// CreateChat creates a new chat with a character
+func (c *Client) CreateChat(characterID string, greeting bool) (*Chat, *Turn, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return nil, nil, err
 	}
-	if extraArgs != nil {
-		for key, val := range extraArgs {
-			data[key] = val
+
+	requestID := generateUUID()
+	chatID := generateUUID()
+
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "create_chat",
+		RequestID: requestID,
+		Payload: CreateChatPayload{
+			Chat: ChatPayload{
+				ChatID:      chatID,
+				CreatorID:   c.UserAccountID,
+				Visibility:  "VISIBILITY_PRIVATE",
+				CharacterID: characterID,
+				Type:        "TYPE_ONE_ON_ONE",
+			},
+			WithGreeting: greeting,
+		},
+	}
+
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	var newChat *Chat
+	var greetingTurn *Turn
+
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return nil, nil, err
+		}
+
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		switch response.Command {
+		case "neo_error":
+			return nil, nil, errors.New(response.Comment)
+		case "create_chat_response":
+			var payload CreateChatResponsePayload
+			err = json.Unmarshal(responseBytes, &payload)
+			if err != nil {
+				return nil, nil, err
+			}
+			newChat = &payload.Chat
+
+			if !greeting {
+				return newChat, nil, nil
+			}
+			// Continue to wait for greeting turn
+		case "add_turn":
+			var payload TurnResponsePayload
+			err = json.Unmarshal(responseBytes, &payload)
+			if err != nil {
+				return nil, nil, err
+			}
+			greetingTurn = &payload.Turn
+			return newChat, greetingTurn, nil
 		}
 	}
-	return request("chat/history/msgs/delete/", c.Session, c.Token, http.MethodPost, data, false, false)
 }
 
-func (c *Chat) NewChat(char string) (*ChatData, error) {
-	data := map[string]interface{}{
-		"character_external_id": char,
+// FetchHistories retrieves chat histories for a character
+func (c *Client) FetchHistories(characterID string, amount int) ([]ChatHistory, error) {
+	urlStr := "https://plus.character.ai/chat/character/histories/"
+	headers := c.GetHeaders(false)
+
+	payload := FetchHistoriesRequest{
+		ExternalID: characterID,
+		Number:     amount,
 	}
-	chatResult, errChat := baseRequest("chat/history/create/", c.Session, c.Token, http.MethodPost, data, false)
-	if errChat != nil {
-		return nil, errChat
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
 	}
-	chatData := &ChatData{}
-	if errUnmarshall := json.Unmarshal(chatResult, chatData); errUnmarshall != nil {
-		return nil, errUnmarshall
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return nil, err
 	}
-	return chatData, nil
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch histories, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result FetchHistoriesResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse time strings to time.Time
+	for i := range result.Histories {
+		history := &result.Histories[i]
+		history.CreateTime, err = time.Parse(time.RFC3339Nano, history.CreateTimeStr)
+		if err != nil {
+			return nil, err
+		}
+		history.LastInteraction, err = time.Parse(time.RFC3339Nano, history.LastInteractionStr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return result.Histories, nil
+}
+
+// FetchChats retrieves chats for a character
+func (c *Client) FetchChats(characterID string, numPreviewTurns int) ([]*Chat, error) {
+	urlStr := fmt.Sprintf("https://neo.character.ai/chats/?character_ids=%s&num_preview_turns=%d", characterID, numPreviewTurns)
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch chats, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result FetchChatsResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, chat := range result.Chats {
+		chat.CreateTime, err = time.Parse(time.RFC3339Nano, chat.CreateTimeStr)
+		if err != nil {
+			return nil, err
+		}
+		if chat.CharacterAvatarURI != "" {
+			chat.CharacterAvatar = &Avatar{FileName: chat.CharacterAvatarURI}
+		}
+	}
+
+	return result.Chats, nil
+}
+
+// FetchChat retrieves a chat by its ID
+func (c *Client) FetchChat(chatID string) (*Chat, error) {
+	urlStr := fmt.Sprintf("https://neo.character.ai/chat/%s/", chatID)
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch chat, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var response struct {
+		Chat *Chat `json:"chat"`
+	}
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	// Process the chat data
+	chat := response.Chat
+
+	// Convert time strings to time.Time
+	chat.CreateTime, err = time.Parse(time.RFC3339Nano, chat.CreateTimeStr)
+	if err != nil {
+		return nil, err
+	}
+
+	// Handle character avatar if available
+	if chat.CharacterAvatarURI != "" {
+		chat.CharacterAvatar = &Avatar{FileName: chat.CharacterAvatarURI}
+	}
+
+	return chat, nil
+}
+
+// FetchRecentChats retrieves recent chats for the user
+func (c *Client) FetchRecentChats() ([]*Chat, error) {
+	urlStr := "https://neo.character.ai/chats/recent/"
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to fetch recent chats, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var result FetchChatsResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, chat := range result.Chats {
+		chat.CreateTime, err = time.Parse(time.RFC3339Nano, chat.CreateTimeStr)
+		if err != nil {
+			return nil, err
+		}
+		if chat.CharacterAvatarURI != "" {
+			chat.CharacterAvatar = &Avatar{FileName: chat.CharacterAvatarURI}
+		}
+	}
+
+	return result.Chats, nil
+}
+
+// FetchMessages retrieves messages from a chat
+func (c *Client) FetchMessages(chatID string, pinnedOnly bool, nextToken string) ([]*Turn, string, error) {
+	urlStr := fmt.Sprintf("https://neo.character.ai/turns/%s/", chatID)
+	if nextToken != "" {
+		urlStr += fmt.Sprintf("?next_token=%s", url.QueryEscape(nextToken))
+	}
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.Get(urlStr, headers)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, "", fmt.Errorf("failed to fetch messages, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var result FetchMessagesResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return nil, "", err
+	}
+
+	var turns []*Turn
+	for i := range result.Turns {
+		turn := &result.Turns[i]
+		if !pinnedOnly || turn.IsPinned {
+			turns = append(turns, turn)
+		}
+	}
+
+	return turns, result.Meta.NextToken, nil
+}
+
+// FetchAllMessages retrieves all messages from a chat
+func (c *Client) FetchAllMessages(chatID string, pinnedOnly bool) ([]*Turn, error) {
+	var allTurns []*Turn
+	var nextToken string
+	for {
+		turns, token, err := c.FetchMessages(chatID, pinnedOnly, nextToken)
+		if err != nil {
+			return nil, err
+		}
+		allTurns = append(allTurns, turns...)
+		if token == "" {
+			break
+		}
+		nextToken = token
+	}
+	return allTurns, nil
+}
+
+// UpdateChatName updates the name of a chat
+func (c *Client) UpdateChatName(chatID string, name string) error {
+	urlStr := fmt.Sprintf("https://neo.character.ai/chat/%s/update_name", chatID)
+	headers := c.GetHeaders(false)
+
+	payload := UpdateChatNamePayload{
+		Name: name,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.Requester.DoRequest("PATCH", urlStr, headers, bodyBytes)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to update chat name, status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// ArchiveChat archives a chat
+func (c *Client) ArchiveChat(chatID string) error {
+	urlStr := fmt.Sprintf("https://neo.character.ai/chat/%s/archive", chatID)
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.DoRequest("PATCH", urlStr, headers, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to archive chat, status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// UnarchiveChat unarchives a chat
+func (c *Client) UnarchiveChat(chatID string) error {
+	urlStr := fmt.Sprintf("https://neo.character.ai/chat/%s/unarchive", chatID)
+	headers := c.GetHeaders(false)
+
+	resp, err := c.Requester.DoRequest("PATCH", urlStr, headers, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to unarchive chat, status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
+// CopyChat copies a chat up to a specific turn
+func (c *Client) CopyChat(chatID string, endTurnID string) (string, error) {
+	urlStr := fmt.Sprintf("https://neo.character.ai/chat/%s/copy", chatID)
+	headers := c.GetHeaders(false)
+
+	payload := CopyChatRequest{
+		EndTurnID: endTurnID,
+	}
+	bodyBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := c.Requester.Post(urlStr, headers, bodyBytes)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("failed to copy chat, status code: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	var result CopyChatResponse
+	err = json.Unmarshal(body, &result)
+	if err != nil {
+		return "", err
+	}
+
+	return result.NewChatID, nil
+}
+
+// UpdatePrimaryCandidate updates the primary candidate of a turn
+func (c *Client) UpdatePrimaryCandidate(chatID string, turnID string, candidateID string) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return err
+	}
+
+	requestID := generateUUID()
+
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "update_primary_candidate",
+		OriginID:  "web-next",
+		RequestID: requestID,
+		Payload: UpdatePrimaryCandidatePayload{
+			CandidateID: candidateID,
+			TurnKey: TurnKey{
+				ChatID: chatID,
+				TurnID: turnID,
+			},
+		},
+	}
+
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return err
+	}
+
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return err
+		}
+
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return err
+		}
+
+		switch response.Command {
+		case "neo_error":
+			return errors.New(response.Comment)
+		case "ok":
+			return nil
+		}
+	}
+}
+
+// EditMessage edits a message in a turn
+func (c *Client) EditMessage(chatID string, turnID string, candidateID string, text string) (*Turn, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return nil, err
+	}
+
+	requestID := generateUUID()
+
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "edit_turn_candidate",
+		OriginID:  "web-next",
+		RequestID: requestID,
+		Payload: EditTurnCandidatePayload{
+			TurnKey: TurnKey{
+				ChatID: chatID,
+				TurnID: turnID,
+			},
+			CurrentCandidateID:     candidateID,
+			NewCandidateRawContent: text,
+		},
+	}
+
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return nil, err
+		}
+
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return nil, err
+		}
+
+		switch response.Command {
+		case "neo_error":
+			return nil, errors.New(response.Comment)
+		case "update_turn":
+			var payload TurnResponsePayload
+			err = json.Unmarshal(responseBytes, &payload)
+			if err != nil {
+				return nil, err
+			}
+			return &payload.Turn, nil
+		}
+	}
+}
+
+// DeleteMessages deletes messages from a chat
+func (c *Client) DeleteMessages(chatID string, turnIDs []string) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return err
+	}
+
+	requestID := generateUUID()
+
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "remove_turns",
+		OriginID:  "web-next",
+		RequestID: requestID,
+		Payload: RemoveTurnsPayload{
+			ChatID:  chatID,
+			TurnIDs: turnIDs,
+		},
+	}
+
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return err
+	}
+
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return err
+		}
+
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return err
+		}
+
+		switch response.Command {
+		case "neo_error":
+			return errors.New(response.Comment)
+		case "remove_turns_response":
+			return nil
+		}
+	}
+}
+
+func (c *Client) DeleteMessage(chatID string, turnID string) error {
+	return c.DeleteMessages(chatID, []string{turnID})
+}
+
+// PinMessage pins a message in a chat
+func (c *Client) PinMessage(chatID string, turnID string) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return err
+	}
+
+	requestID := generateUUID()
+
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "set_turn_pin",
+		OriginID:  "web-next",
+		RequestID: requestID,
+		Payload: SetTurnPinPayload{
+			IsPinned: true,
+			TurnKey: TurnKey{
+				ChatID: chatID,
+				TurnID: turnID,
+			},
+		},
+	}
+
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return err
+	}
+
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return err
+		}
+
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return err
+		}
+
+		switch response.Command {
+		case "neo_error":
+			return errors.New(response.Comment)
+		case "update_turn":
+			var payload TurnResponsePayload
+			err = json.Unmarshal(responseBytes, &payload)
+			if err != nil {
+				return err
+			}
+			if payload.Turn.IsPinned {
+				return nil
+			}
+			return errors.New("failed to pin message")
+		}
+	}
+}
+
+// UnpinMessage unpins a message in a chat
+func (c *Client) UnpinMessage(chatID string, turnID string) error {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return err
+	}
+
+	requestID := generateUUID()
+
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "set_turn_pin",
+		OriginID:  "web-next",
+		RequestID: requestID,
+		Payload: SetTurnPinPayload{
+			IsPinned: false,
+			TurnKey: TurnKey{
+				ChatID: chatID,
+				TurnID: turnID,
+			},
+		},
+	}
+
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return err
+	}
+
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return err
+		}
+
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return err
+		}
+
+		switch response.Command {
+		case "neo_error":
+			return errors.New(response.Comment)
+		case "update_turn":
+			var payload TurnResponsePayload
+			err = json.Unmarshal(responseBytes, &payload)
+			if err != nil {
+				return err
+			}
+			if !payload.Turn.IsPinned {
+				return nil
+			}
+			return errors.New("failed to unpin message")
+		}
+	}
+}
+
+func (c *Client) AnotherResponse(characterID, chatID, turnID string) (*Turn, error) {
+	c.mutex.Lock()
+	defer c.mutex.Unlock()
+
+	// Initialize WebSocket connection if not connected
+	err := c.Requester.InitializeWebSocket()
+	if err != nil {
+		return nil, err
+	}
+
+	requestID := generateUUID()
+
+	// Construct the message
+	message := WebSocketMessage{
+		Command:   "generate_turn_candidate",
+		OriginID:  "web-next",
+		RequestID: requestID,
+		Payload: GenerateTurnCandidatePayload{
+			CharacterID:         characterID,
+			TTSEnabled:          false,
+			PreviousAnnotations: generatePreviousAnnotations(),
+			SelectedLanguage:    "",
+			UserName:            "",
+			TurnKey: TurnKey{
+				ChatID: chatID,
+				TurnID: turnID,
+			},
+		},
+	}
+
+	// Send the message
+	err = c.Requester.SendWebSocketMessage(message)
+	if err != nil {
+		return nil, err
+	}
+
+	// Receive response
+	for {
+		responseBytes, err := c.Requester.ReceiveRawWebSocketMessage()
+		if err != nil {
+			return nil, err
+		}
+
+		var response WebSocketResponse
+		err = json.Unmarshal(responseBytes, &response)
+		if err != nil {
+			return nil, err
+		}
+
+		switch response.Command {
+		case "neo_error":
+			return nil, errors.New(response.Comment)
+		case "update_turn":
+			var payload TurnResponsePayload
+			err = json.Unmarshal(responseBytes, &payload)
+			if err != nil {
+				return nil, err
+			}
+			return &payload.Turn, nil
+		}
+	}
 }
