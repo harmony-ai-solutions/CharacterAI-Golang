@@ -80,12 +80,25 @@ func (c *Client) SendMessage(characterID, chatID, text string) (*Turn, error) {
 		case "neo_error":
 			return nil, errors.New(response.Comment)
 		case "add_turn", "update_turn":
-			var payload TurnResponsePayload
-			err = json.Unmarshal(response.Payload, &payload)
+			var result TurnResponsePayload
+			err = json.Unmarshal(responseBytes, &result)
 			if err != nil {
 				return nil, err
 			}
-			return &payload.Turn, nil
+			if result.Turn.Author.IsHuman {
+				// Skip initial response by the user
+				continue
+			}
+			// TODO: This only works for 1on1 conversations currently
+			var isFinal = false
+			for _, candidate := range result.Turn.Candidates {
+				if candidate.IsFinal {
+					isFinal = true
+				}
+			}
+			if isFinal {
+				return &result.Turn, nil
+			}
 		}
 	}
 }
@@ -608,7 +621,7 @@ func (c *Client) EditMessage(chatID string, turnID string, candidateID string, t
 			return nil, errors.New(response.Comment)
 		case "update_turn":
 			var payload TurnResponsePayload
-			err = json.Unmarshal(response.Payload, &payload)
+			err = json.Unmarshal(responseBytes, &payload)
 			if err != nil {
 				return nil, err
 			}
@@ -724,7 +737,7 @@ func (c *Client) PinMessage(chatID string, turnID string) error {
 			return errors.New(response.Comment)
 		case "update_turn":
 			var payload TurnResponsePayload
-			err = json.Unmarshal(response.Payload, &payload)
+			err = json.Unmarshal(responseBytes, &payload)
 			if err != nil {
 				return err
 			}
@@ -787,7 +800,7 @@ func (c *Client) UnpinMessage(chatID string, turnID string) error {
 			return errors.New(response.Comment)
 		case "update_turn":
 			var payload TurnResponsePayload
-			err = json.Unmarshal(response.Payload, &payload)
+			err = json.Unmarshal(responseBytes, &payload)
 			if err != nil {
 				return err
 			}
@@ -853,7 +866,7 @@ func (c *Client) AnotherResponse(characterID, chatID, turnID string) (*Turn, err
 			return nil, errors.New(response.Comment)
 		case "update_turn":
 			var payload TurnResponsePayload
-			err = json.Unmarshal(response.Payload, &payload)
+			err = json.Unmarshal(responseBytes, &payload)
 			if err != nil {
 				return nil, err
 			}

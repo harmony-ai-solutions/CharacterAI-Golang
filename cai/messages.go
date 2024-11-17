@@ -44,8 +44,13 @@ type WebSocketResponse struct {
 	Comment string          `json:"comment,omitempty"`
 }
 
+type ChatInfo struct {
+	Type string `json:"type"`
+}
+
 type TurnResponsePayload struct {
-	Turn Turn `json:"turn"`
+	Turn     Turn     `json:"turn"`
+	ChatInfo ChatInfo `json:"chat_info"`
 }
 
 type CreateChatPayload struct {

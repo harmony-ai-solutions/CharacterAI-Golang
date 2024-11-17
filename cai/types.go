@@ -575,14 +575,49 @@ func (ch *ChatHistory) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type HistoryMessageActor struct {
+	User            *User  `json:"user"`
+	IsHuman         bool   `json:"is_human"`
+	Name            string `json:"name"`
+	NumInteractions int    `json:"num_interactions"`
+}
+
 type HistoryMessage struct {
-	UUID              string `json:"uuid"`
-	ID                string `json:"id"`
-	Text              string `json:"text"`
-	Src               string `json:"src"`
-	Tgt               string `json:"tgt"`
-	IsAlternative     bool   `json:"is_alternative"`
-	ImageRelativePath string `json:"image_rel_path"`
+	ID                int64                `json:"id"`
+	Text              string               `json:"text"`
+	Src               *HistoryMessageActor `json:"src"`
+	Tgt               *HistoryMessageActor `json:"tgt"`
+	IsAlternative     bool                 `json:"is_alternative"`
+	Annotable         bool                 `json:"annotable"`
+	DisplayName       string               `json:"display_name"`
+	ImageRelativePath string               `json:"image_rel_path"`
+	CreateTimeStr     string               `json:"created"`
+	CreateTime        time.Time            `json:"-"`
+}
+
+// UnmarshalJSON custom unmarshalling for ChatHistory.
+func (ch *HistoryMessage) UnmarshalJSON(data []byte) error {
+	type Alias HistoryMessage
+	aux := &struct {
+		*Alias
+	}{
+		Alias: (*Alias)(ch),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	// Parse times
+	var err error
+	if ch.CreateTimeStr != "" {
+		ch.CreateTime, err = time.Parse(time.RFC3339Nano, ch.CreateTimeStr)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // PreviousAnnotations represents the annotations used in the request.
