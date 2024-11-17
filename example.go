@@ -1,6 +1,6 @@
 // Package main
 /*
-Copyright © 2023 Harmony AI Solutions & Contributors
+Copyright © 2023-2024 Harmony AI Solutions & Contributors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,88 +21,104 @@ import (
 	"fmt"
 	"github.com/harmony-ai-solutions/CharacterAI-Golang/cai"
 	"os"
-	"strconv"
 	"strings"
 )
 
 func main() {
-	// Initial params - Usage of env vars recommended
-	//token := ""
-	//character := ""
-	//isPlus := false
+	// Retrieve the token and character ID from environment variables
 	token := os.Getenv("CAI_TOKEN")
-	character := os.Getenv("CAI_CHAR")
-	isPlus, errParse := strconv.ParseBool(os.Getenv("CAI_PLUS"))
-	if errParse != nil {
-		isPlus = false
-	}
+	webNextAuth := os.Getenv("CAI_WEBNEXTAUTH")
+	proxyURL := os.Getenv("CAI_PROXY")
+	characterID := os.Getenv("CAI_CHAR")
 
-	// Create client
-	caiClient, errClient := cai.NewGoCAI(token, isPlus)
-	if errClient != nil {
-		fmt.Println(fmt.Errorf("unable to create client, error: %q", errClient))
+	if token == "" || characterID == "" {
+		fmt.Println("Error: CAI_TOKEN or CAI_CHAR environment variable is not set.")
 		os.Exit(1)
 	}
-	// Get chat data
-	chatData, errChat := caiClient.Chat.GetChat(character)
-	if errChat != nil {
-		if strings.Contains(errChat.Error(), "404") {
-			// Chat does not exist yet, create new
-			chatData, errChat = caiClient.Chat.NewChat(character)
-			if errChat != nil {
-				fmt.Println(fmt.Errorf("unable to create chat, error: %q", errChat))
-				os.Exit(3)
-			}
-		} else {
-			fmt.Println(fmt.Errorf("unable to fetch chat data, error: %q", errChat))
-			os.Exit(2)
-		}
-	}
-	// Find AI paricipant in chat
-	var aiParticipant *cai.ChatParticipant
-	for _, participant := range chatData.Participants {
-		if !participant.IsHuman {
-			aiParticipant = participant
-			break
-		}
+
+	// Create a new client instance
+	client := cai.NewClient(token, webNextAuth, proxyURL)
+	err := client.Authenticate()
+	if err != nil {
+		fmt.Printf("Authentication failed: %v\n", err)
+		os.Exit(2)
 	}
 
-	// Get History for chatroom
-	if chatHistoryData, errHistory := caiClient.Chat.GetHistory(chatData.ExternalID); errHistory != nil {
-		fmt.Println(fmt.Errorf("unable to parse user data"))
-		os.Exit(4)
+	// Fetch existing chats with the character
+	chats, err := client.FetchChats(characterID, 0)
+	if err != nil {
+		fmt.Printf("Error fetching chats: %v\n", err)
+		os.Exit(3)
+	}
+
+	var chat *cai.Chat
+
+	if len(chats) > 0 {
+		// Use the most recent chat with the character
+		chat = chats[0]
+		fmt.Printf("Using existing chat with ID: %s\n", chat.ChatID)
 	} else {
-		fmt.Println("Previous messages (up to 5):")
-		messageHistory := chatHistoryData.Messages
-		if len(chatHistoryData.Messages) > 5 {
-			messageHistory = messageHistory[len(messageHistory)-5:]
+		// Create a new chat with the character
+		chat, _, err = client.CreateChat(characterID, true)
+		if err != nil {
+			fmt.Printf("Error creating chat: %v\n", err)
+			os.Exit(4)
 		}
-		for _, message := range messageHistory {
-			fmt.Println(fmt.Sprintf("%v: %v", message.SourceName, message.Text))
-		}
+		fmt.Printf("Created new chat with ID: %s\n", chat.ChatID)
 	}
 
-	for true {
-		fmt.Println("Enter user message: ")
-		scanner := bufio.NewScanner(os.Stdin)
-		scanner.Scan()
-		errInput := scanner.Err()
-		if errInput != nil {
-			fmt.Println(fmt.Errorf("unable to scan user input. Error: %v", errInput))
-			os.Exit(6)
-		}
-		// Send
-		messageResult, errMessage := caiClient.Chat.SendMessage(chatData.ExternalID, aiParticipant.User.Username, scanner.Text(), nil)
-		if errMessage != nil {
-			fmt.Println(fmt.Errorf("unable to send message. Error: %v", errMessage))
-			os.Exit(7)
-		}
-		// Handle result
-		if len(messageResult.Replies) > 0 {
-			firstReply := messageResult.Replies[0]
-			fmt.Println(fmt.Sprintf("%v: %v", aiParticipant.Name, firstReply.Text))
-			fmt.Println()
-		}
+	// Print the previous messages in the chat (up to 5)
+	messages, _, err := client.FetchMessages(chat.ChatID, false, "")
+	if err != nil {
+		fmt.Printf("Error fetching messages: %v\n", err)
+		os.Exit(1)
 	}
 
+	fmt.Println("Previous messages (up to 5):")
+	if len(messages) > 5 {
+		messages = messages[len(messages)-5:]
+	}
+	for _, turn := range messages {
+		var authorName string
+		if turn.Author.IsHuman {
+			authorName = "You"
+		} else {
+			authorName = turn.Author.Name
+		}
+		candidate := turn.Candidates[turn.PrimaryCandidateID]
+		fmt.Printf("%s: %s\n", authorName, candidate.Text)
+	}
+	fmt.Println()
+
+	// Start the interaction loop
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		fmt.Print("You: ")
+		userInput, err := reader.ReadString('\n')
+		if err != nil {
+			fmt.Printf("Error reading user input: %v\n", err)
+			os.Exit(1)
+		}
+		userInput = strings.TrimSpace(userInput)
+
+		// Send the user's message to the character
+		turn, err := client.SendMessage(characterID, chat.ChatID, userInput)
+		if err != nil {
+			fmt.Printf("Error sending message: %v\n", err)
+			os.Exit(1)
+		}
+
+		// Retrieve the AI's response
+		aiResponse := ""
+		if turn != nil && len(turn.Candidates) > 0 {
+			primaryCandidate := turn.Candidates[turn.PrimaryCandidateID]
+			aiResponse = primaryCandidate.Text
+		} else {
+			fmt.Println("No response received from the AI.")
+			continue
+		}
+
+		fmt.Printf("%s: %s\n", turn.Author.Name, aiResponse)
+		fmt.Println()
+	}
 }
